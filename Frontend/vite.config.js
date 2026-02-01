@@ -12,5 +12,5 @@ export default defineConfig({
       usePolling: true, // Ye line zaroori hai Docker ke liye
       interval:2000
     },
-  },v
+  },
 })
