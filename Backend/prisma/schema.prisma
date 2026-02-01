@@ -1,0 +1,193 @@
+// --- Configuration ---
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. User: Entry point for the Dashboard
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  password      String
+  
+  // Dashboard index: Projects the user can access directly
+  accessibleProjectIds String[] 
+  
+  // Relations
+  ownedProjects Project[]  @relation("ProjectOwner")
+  checkpoints   Checkpoint[]
+  notifications Notification[] @relation("ReceiverRelation")
+  sentNotifs    Notification[] @relation("SenderRelation")
+  
+  createdAt     DateTime   @default(now())
+}
+
+// 2. Project: The Root Container (Repo Level)
+model Project {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  rootPath      String    // Physical location on server disk
+  
+  // Global Git Info (Moved from file-level to avoid redundancy)
+  sourceType    SourceType @default(UI_CREATED)
+  remoteUrl     String?    // GitHub/GitLab link
+  currentBranch String     @default("main")
+  
+  ownerId       String
+  owner         User       @relation("ProjectOwner", fields: [ownerId], references: [id])
+  
+  files         FileMeta[]
+  createdAt     DateTime   @default(now())
+}
+
+// 3. FileMeta: Hierarchical structure for Tree UI
+model FileMeta {
+  id            String    @id @default(uuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  name          String
+  extension     String?   // NULL for folders
+  isFolder      Boolean   @default(false)
+  isDeleted     Boolean   @default(false)
+  absolutePath  String    @unique // Required for Disk/Git sync
+  
+  // Hierarchy Logic
+  parentId      String?
+  parent        FileMeta?  @relation("Hierarchy", fields: [parentId], references: [id])
+  children      FileMeta[] @relation("Hierarchy")
+
+  // Specialized Sub-Tables
+  gitContext    GitContext?  
+  editorState   EditorState? 
+  
+  creatorId     String
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  // Feature Connections
+  checkpoints   Checkpoint[]
+  activityLogs  ActivityLog[]
+  collaboratorDetail CollaboratorDetail?
+}
+
+// 4. GitContext: File-specific status only
+model GitContext {
+  id             String    @id @default(uuid())
+  fileMetaId     String    @unique
+  fileMeta       FileMeta  @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
+
+  status         GitStatus @default(UNTRACKED)
+  isIgnored      Boolean   @default(false)
+  isConflicted   Boolean   @default(false)
+  lastCommitHash String?
+  lastCommitMsg  String?
+}
+
+// 5. EditorState: Real-time and Raw content
+model EditorState {
+  id             String    @id @default(uuid())
+  fileMetaId     String    @unique
+  fileMeta       FileMeta  @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
+
+  content        String?   @db.Text // Plain text for search/LSP
+  binaryText     Bytes?    // Yjs binary for CRDT sync persistence
+}
+
+// 6. CollaboratorDetail: Granular/Recursive Roles
+model CollaboratorDetail {
+  id         String   @id @default(uuid())
+  fileMetaId String   @unique
+fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
+  adminId    String   // The primary creator
+  editors    String[] // Array of User IDs with write access
+  viewers    String[] // Array of User IDs with read-only access
+  
+  updatedAt  DateTime @updatedAt
+}
+
+// 7. ActivityLog: 100 most recent operations
+model ActivityLog {
+  id         String   @id @default(uuid())
+  fileMetaId String
+  fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
+  
+  userId     String
+  opType     OpType
+  summary    String?  
+  diffPatch  String?  @db.Text 
+  
+  timestamp  DateTime @default(now())
+}
+
+// 8. Checkpoint: Single per-user safety slot
+model Checkpoint {
+  id         String   @id @default(uuid())
+  fileMetaId String
+  fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
+  
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  
+  content    String?  @db.Text
+  binaryText Bytes?   
+  
+  timestamp  DateTime @default(now())
+
+  @@unique([fileMetaId, userId]) // Overwrites previous per user
+}
+
+// 9. Notification: Real-time system events
+model Notification {
+  id         String   @id @default(uuid())
+  receiverId String
+  receiver   User     @relation("ReceiverRelation", fields: [receiverId], references: [id])
+  
+  senderId   String
+  sender     User     @relation("SenderRelation", fields: [senderId], references: [id])
+  
+  type       NotifType
+  status     NotifStatus @default(PENDING)
+  message    String
+  
+  createdAt  DateTime @default(now())
+}
+
+// --- Enums ---
+
+enum GitStatus {
+  UNTRACKED
+  MODIFIED
+  STAGED
+  COMMITTED
+}
+
+enum SourceType {
+  LOCAL
+  GIT
+  UI_CREATED
+}
+
+enum OpType {
+  STRUCTURAL_CHANGE
+  LOGIC_UPDATE
+  CONFLICT
+}
+
+enum NotifType {
+  INVITE
+  REVOKE
+  CONFLICT_ALERT
+}
+
+enum NotifStatus {
+  PENDING
+  ACCEPTED
+  READ
+}

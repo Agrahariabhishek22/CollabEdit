@@ -1,0 +1,66 @@
+version: "3.8"
+
+services:
+  # 1. Database - PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: collaborative_postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=abhishek
+      - POSTGRES_PASSWORD=222137
+      - POSTGRES_DB=collab_editor_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 2. Redis - Message Broker for WebSockets & Scaling
+  redis:
+    image: redis:alpine
+    container_name: collaborative_redis
+    ports:
+      - "6379:6379"
+
+  # 3. Backend - Node.js + LSP Servers
+  backend:
+    build: ./Backend
+    container_name: collaborative_backend
+    ports:
+      - "3000:3000" # Backend API ke liye
+      - "5555:5555" # Prisma Studio ke liye
+    environment:
+      # Postgres Connection String: postgresql://USER:PASSWORD@HOST:PORT/DB_NAME
+      - DATABASE_URL=postgresql://abhishek:222137@postgres:5432/collab_editor_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=we_are_2004_born
+      # Disk Storage ka path env mein rakho taaki code mein asani ho
+      - STORAGE_PATH=/app/storage
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./Backend:/app
+      - /app/node_modules
+      - ./Backend/storage:/app/storage
+    tty: true          # Terminal allocate karne ke liye
+    stdin_open: true   # Interactive session open rakhne ke liye
+
+  # 4. Frontend - React (Monaco Editor)
+  frontend:
+    build: ./Frontend
+    container_name: collaborative_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3000
+    depends_on:
+      - backend
+    volumes:
+      - ./Frontend:/app
+      - /app/node_modules
+    tty: true          # Terminal allocate karne ke liye
+    stdin_open: true   # Interactive session open rakhne ke liye
+volumes:
+  postgres_data: # Persistent storage for SQL data
