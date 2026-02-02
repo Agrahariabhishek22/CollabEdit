@@ -33,6 +33,10 @@ model Project {
   name          String
   description   String?
   rootPath      String    // Physical location on server disk
+
+  // NEW: Direct reference to the top-most folder/file
+  rootFileMetaId    String?     @unique
+  rootFileMeta      FileMeta?   @relation("ProjectRoot", fields: [rootFileMetaId], references: [id])
   
   // Global Git Info (Moved from file-level to avoid redundancy)
   sourceType    SourceType @default(UI_CREATED)
@@ -51,6 +55,9 @@ model FileMeta {
   id            String    @id @default(uuid())
   projectId     String
   project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // NEW: Back-relation for the project root
+  isRootOfProject   Project?    @relation("ProjectRoot")
   
   name          String
   extension     String?   // NULL for folders
@@ -104,7 +111,7 @@ model EditorState {
 model CollaboratorDetail {
   id         String   @id @default(uuid())
   fileMetaId String   @unique
-fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
+  fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
   adminId    String   // The primary creator
   editors    String[] // Array of User IDs with write access
   viewers    String[] // Array of User IDs with read-only access

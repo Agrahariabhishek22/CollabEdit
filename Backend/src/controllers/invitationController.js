@@ -1,65 +1,163 @@
+/**
+ * Invitation Controller: Complete Multi-Level Flow
+ * Handles project/folder/file (local) and project/branch (git) invitations
+ */
+
 import { asyncHandler, AppError } from "../middlewares/errorHandler.js";
 import { prisma } from "../config/database.js";
+import { getRedisClient } from "../config/redis.js";
 import { getIO } from "../config/socketio.js";
-import { emitToUser } from "../socket/events.js";
+import {
+  getAllDescendantIds,
+  enforcePermissionChangesBatch,
+  processDelta,
+  getResourceType,
+} from "../helpers/invitationHelpers.js";
 
+const redis = getRedisClient();
+const io = getIO();
+
+/**
+ * POST /api/invitations/:resourceId/invite
+ * Send bulk invitations (delta-based: [{ email, previous_mode, modified_mode }])
+ */
 export const sendInvitations = asyncHandler(async (req, res) => {
-  const { resourceId, invites } = req.body; 
-  const senderId = req.user.id;
+  const { resourceId } = req.params;
+  const deltaArray = req.body;
+  const adminId = req.user.id;
 
-  // Verification: Is sender the admin?
-  const resource = await prisma.fileMeta.findUnique({ 
+  const resource = await prisma.fileMeta.findUnique({
     where: { id: resourceId },
-    include: { collaboratorDetail: true } 
+    include: { collaboratorDetail: true, project: true },
   });
 
-  if (resource.collaboratorDetail.adminId !== senderId) {
-    throw new AppError("Unauthorized", 403);
+  if (!resource) throw new AppError("Resource not found", 404);
+  if (resource.collaboratorDetail?.adminId !== adminId) {
+    throw new AppError("Only admin can send invitations", 403);
   }
 
-  for (const invite of invites) {
-    const receiver = await prisma.user.findUnique({ where: { email: invite.email } });
-    if (!receiver) continue;
+  const changes = await processDelta(deltaArray);
+  const descendantIds = await getAllDescendantIds(resourceId);
 
-    // Create Notification with Metadata
-    const notif = await prisma.notification.create({
-      data: {
-        receiverId: receiver.id,
-        senderId: senderId,
-        type: "INVITE",
-        // Metadata as JSON string for security and easy parsing
-        message: JSON.stringify({
-          text: `${req.user.name} invited you to ${resource.name}`,
-          resourceId,
-          mode: invite.mode
-        })
+  await prisma.$transaction(async (tx) => {
+    // New invitations
+    for (const invite of changes.newInvites) {
+      await tx.notification.create({
+        data: {
+          receiverId: invite.userId,
+          senderId: adminId,
+          type: "INVITE",
+          status: "PENDING",
+          message: JSON.stringify({
+            resourceId,
+            resourceType: await getResourceType(resourceId),
+            mode: invite.mode,
+            resourceName: resource.name,
+          }),
+        },
+      });
+
+      io.to(`user:${invite.userId}`).emit("NEW_INVITATION", {
+        senderName: req.user.name,
+        resourceName: resource.name,
+        mode: invite.mode,
+      });
+    }
+
+    // Revokes (remove from all descendants)
+    for (const revoke of changes.revokes) {
+      for (const fileMetaId of descendantIds) {
+        const collab = await tx.collaboratorDetail.findUnique({
+          where: { fileMetaId },
+        });
+        if (collab) {
+          await tx.collaboratorDetail.update({
+            where: { fileMetaId },
+            data: {
+              editors: collab.editors.filter(id => id !== revoke.userId),
+              viewers: collab.viewers.filter(id => id !== revoke.userId),
+            },
+          });
+        }
       }
-    });
+      await enforcePermissionChangesBatch([revoke.userId], descendantIds, "REVOKE", null);
+      io.to(`user:${revoke.userId}`).emit("INVITATION_REVOKED", {
+        resourceName: resource.name,
+      });
+    }
 
-    // Real-time alert to User Room
-    emitToUser(getIO(), receiver.id, "NEW_INVITATION", {
-      notifId: notif.id,
-      message: `${req.user.name} wants you to collaborate!`
-    });
-  }
+    // Downgrades (editor → viewer)
+    for (const downgrade of changes.downgrades) {
+      for (const fileMetaId of descendantIds) {
+        const collab = await tx.collaboratorDetail.findUnique({
+          where: { fileMetaId },
+        });
+        if (collab?.editors.includes(downgrade.userId)) {
+          await tx.collaboratorDetail.update({
+            where: { fileMetaId },
+            data: {
+              editors: collab.editors.filter(id => id !== downgrade.userId),
+              viewers: Array.from(new Set([...collab.viewers, downgrade.userId])),
+            },
+          });
+        }
+      }
+      await enforcePermissionChangesBatch([downgrade.userId], descendantIds, "DOWNGRADE", downgrade.newMode);
+    }
 
-  res.status(200).json({ success: true, message: "Invites sent!" });
+    // Upgrades (viewer → editor)
+    for (const upgrade of changes.upgrades) {
+      for (const fileMetaId of descendantIds) {
+        const collab = await tx.collaboratorDetail.findUnique({
+          where: { fileMetaId },
+        });
+        if (collab) {
+          await tx.collaboratorDetail.update({
+            where: { fileMetaId },
+            data: {
+              viewers: collab.viewers.filter(id => id !== upgrade.userId),
+              editors: Array.from(new Set([...collab.editors, upgrade.userId])),
+            },
+          });
+        }
+      }
+    }
+  });
+
+  io.to(`project:${resource.projectId}`).emit("COLLABORATORS_UPDATED", {
+    resourceId,
+    resourceName: resource.name,
+    changes,
+  });
+
+  res.json({
+    success: true,
+    message: "Invitations processed",
+    stats: {
+      newInvites: changes.newInvites.length,
+      revokes: changes.revokes.length,
+      downgrades: changes.downgrades.length,
+      upgrades: changes.upgrades.length,
+    },
+  });
 });
+/**
+ * POST /api/invitations/respond/:notifId
+ * User accepts or rejects an invitation
+ */
 export const respondToInvitation = asyncHandler(async (req, res) => {
-  const { notifId, action } = req.body; // action: 'ACCEPT' or 'REJECT'
+  const { notifId } = req.params;
+  const { action } = req.body;
   const userId = req.user.id;
 
-  // 1. Notification fetch karo metadata nikalne ke liye
   const notification = await prisma.notification.findUnique({
-    where: { id: notifId }
+    where: { id: notifId },
   });
 
-  // Security Check: Kya notification exist karti hai aur isi user ki hai?
   if (!notification || notification.receiverId !== userId) {
-    throw new AppError("Invalid or unauthorized invitation", 401);
+    throw new AppError("Invalid notification", 401);
   }
 
-  // Pehle hi check kar lo agar status already PENDING nahi hai
   if (notification.status !== "PENDING") {
     throw new AppError("Invitation already processed", 400);
   }
@@ -68,55 +166,166 @@ export const respondToInvitation = asyncHandler(async (req, res) => {
     const metadata = JSON.parse(notification.message);
     const { resourceId, mode } = metadata;
 
-    // Humein projectId chahiye user ke accessibleProjectIds array ke liye
     const resource = await prisma.fileMeta.findUnique({
       where: { id: resourceId },
-      select: { projectId: true }
+      include: { project: true },
     });
 
     if (!resource) throw new AppError("Resource no longer exists", 404);
 
-    const updateField = mode === "EDITOR" ? "editors" : "viewers";
-
-    // 2. Atomic Transaction: Sab kuch ek sath update hoga
-    await prisma.$transaction([
-      // A. Resource ke collaborator list mein user ko add karo
-      prisma.collaboratorDetail.update({
+    await prisma.$transaction(async (tx) => {
+      const collab = await tx.collaboratorDetail.findUnique({
         where: { fileMetaId: resourceId },
-        data: { [updateField]: { push: userId } }
-      }),
+      });
 
-      // B. User ke profile mein accessibleProjectIds array update karo
-      prisma.user.update({
-        where: { id: userId },
-        data: { 
-          accessibleProjectIds: { 
-            // set logic check kar lena, agar already exists toh skip ya push
-            push: resource.projectId 
-          } 
+      if (collab) {
+        if (mode === "EDITOR") {
+          collab.editors.push(userId);
+        } else {
+          collab.viewers.push(userId);
         }
-      }),
 
-      // C. Notification status update karo
-      prisma.notification.update({
+        await tx.collaboratorDetail.update({
+          where: { fileMetaId: resourceId },
+          data: {
+            editors: collab.editors,
+            viewers: collab.viewers,
+          },
+        });
+      }
+
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user.accessibleProjectIds.includes(resource.projectId)) {
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            accessibleProjectIds: [...user.accessibleProjectIds, resource.projectId],
+          },
+        });
+      }
+
+      await tx.notification.update({
         where: { id: notifId },
-        data: { status: "ACCEPTED" }
-      })
-    ]);
+        data: { status: "ACCEPTED" },
+      });
+    });
 
-    // Optional: Admin ko bhi socket se batana ki "User has accepted"
-    emitToUser(getIO(), notification.senderId, "INVITATION_ACCEPTED", { userName: req.user.name });
+    io.to(`project:${resource.projectId}`).emit("COLLABORATOR_JOINED", {
+      userId,
+      userName: req.user.name,
+      resourceName: resource.name,
+      mode,
+    });
 
+    res.json({
+      success: true,
+      message: "Invitation accepted",
+      projectId: resource.projectId,
+    });
   } else {
-    // REJECT logic: Notification delete ya REJECTED status
     await prisma.notification.update({
       where: { id: notifId },
-      data: { status: "REJECTED" } // Delete ki jagah status change is better for history
+      data: { status: "REJECTED" },
+    });
+
+    res.json({
+      success: true,
+      message: "Invitation rejected",
     });
   }
+});
 
-  res.status(200).json({ 
-    success: true, 
-    message: `Invitation ${action === 'ACCEPT' ? 'accepted' : 'rejected'} successfully` 
+/**
+ * POST /api/invitations/revoke/:fileMetaId
+ * User removes themselves from a resource (and all nested children)
+ */
+export const userSelfRevoke = asyncHandler(async (req, res) => {
+  const { fileMetaId } = req.params;
+  const userId = req.user.id;
+
+  const resource = await prisma.fileMeta.findUnique({
+    where: { id: fileMetaId },
+    include: { project: true },
+  });
+
+  if (!resource) throw new AppError("Resource not found", 404);
+
+  const descendantIds = await getAllDescendantIds(fileMetaId);
+
+  await prisma.$transaction(async (tx) => {
+    for (const descendantId of descendantIds) {
+      const collab = await tx.collaboratorDetail.findUnique({
+        where: { fileMetaId: descendantId },
+      });
+
+      if (collab) {
+        await tx.collaboratorDetail.update({
+          where: { fileMetaId: descendantId },
+          data: {
+            editors: collab.editors.filter(id => id !== userId),
+            viewers: collab.viewers.filter(id => id !== userId),
+          },
+        });
+      }
+    }
+  });
+
+  await enforcePermissionChangesBatch([userId], descendantIds, "REVOKE", null);
+
+  io.to(`project:${resource.projectId}`).emit("COLLABORATOR_LEFT", {
+    userId,
+    userName: req.user.name,
+    resourceName: resource.name,
+  });
+
+  res.json({
+    success: true,
+    message: "You have been removed from this resource",
+  });
+});
+
+/**
+ * GET /api/invitations/:resourceId/collaborators
+ * Fetch existing collaborators for invite modal (Admin only)
+ */
+export const getCollaborators = asyncHandler(async (req, res) => {
+  const { resourceId } = req.params;
+  const userId = req.user.id;
+
+  const collab = await prisma.collaboratorDetail.findUnique({
+    where: { fileMetaId: resourceId },
+    include: { fileMeta: { select: { name: true } } },
+  });
+
+  if (!collab) throw new AppError("Collaborators not found", 404);
+
+  const isAdmin = collab.adminId === userId;
+
+  if (!isAdmin) {
+    throw new AppError("Only admin can view collaborators", 403);
+  }
+
+  const editorUsers = await prisma.user.findMany({
+    where: { id: { in: collab.editors } },
+    select: { id: true, name: true, email: true },
+  });
+
+  const viewerUsers = await prisma.user.findMany({
+    where: { id: { in: collab.viewers } },
+    select: { id: true, name: true, email: true },
+  });
+
+  res.json({
+    success: true,
+    resourceName: collab.fileMeta.name,
+    isAdmin,
+    collaborators: {
+      admin: await prisma.user.findUnique({
+        where: { id: collab.adminId },
+        select: { id: true, name: true, email: true },
+      }),
+      editors: editorUsers,
+      viewers: viewerUsers,
+    },
   });
 });

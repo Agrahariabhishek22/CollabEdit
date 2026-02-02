@@ -1,10 +1,29 @@
+/**
+ * Invitation Routes
+ * Multi-level permissions: project/folder/file (local) + project/branch (git)
+ */
+
 import express from "express";
-import { respondToInvitation, sendInvitations } from "../controllers/invitationController.js";
-import { protect } from "../middlewares/auth.js";
+import { authenticate } from "../middlewares/auth.js";
+import {
+  sendInvitations,
+  respondToInvitation,
+  userSelfRevoke,
+  getCollaborators,
+} from "../controllers/invitationController.js";
 
 const router = express.Router();
 
-// Middleware: 'protect' ensure karega user logged in hai
-router.post("/send", protect, sendInvitations);
-router.post("/respond", protect, respondToInvitation);
+// ===== Send Invitations (Admin) =====
+router.post("/:resourceId/invite", authenticate, sendInvitations);
+
+// ===== Respond to Invitation (User) =====
+router.post("/respond/:notifId", authenticate, respondToInvitation);
+
+// ===== Self Revoke (User) =====
+router.post("/revoke/:fileMetaId", authenticate, userSelfRevoke);
+
+// ===== Get Collaborators for Modal (Admin) =====
+router.get("/:resourceId/collaborators", authenticate, getCollaborators);
+
 export default router;

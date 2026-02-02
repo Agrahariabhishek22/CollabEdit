@@ -54,6 +54,7 @@ export const createAndUploadProject = asyncHandler(async (req, res) => {
       rootPath: "temp",
     },
   });
+  let rootMetaId = null;
 
   const projectRoot = path.join(process.env.STORAGE_PATH, project.id);
   if (!fs.existsSync(projectRoot))
@@ -121,6 +122,9 @@ export const createAndUploadProject = asyncHandler(async (req, res) => {
           await tx.collaboratorDetail.create({
             data: { fileMetaId: meta.id, adminId: userId },
           });
+          if (i === 0 && !rootMetaId) {
+            rootMetaId = meta.id;
+          }
 
           // Metadata ID save kar lo agle child ke liye
           folderCache.set(pathSoFar, meta.id);
@@ -130,6 +134,12 @@ export const createAndUploadProject = asyncHandler(async (req, res) => {
         currentParentId = folderCache.get(pathSoFar);
       }
     }
+    await tx.project.update({
+      where: { id: project.id },
+      data: {
+        rootFileMetaId: rootMetaId,
+      },
+    });
   });
 
   res.status(201).json({
