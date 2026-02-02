@@ -42,6 +42,8 @@ model Project {
   sourceType    SourceType @default(UI_CREATED)
   remoteUrl     String?    // GitHub/GitLab link
   currentBranch String     @default("main")
+  isBranchLocked Boolean   @default(false)
+  lockAcquiredAt DateTime?
   
   ownerId       String
   owner         User       @relation("ProjectOwner", fields: [ownerId], references: [id])
