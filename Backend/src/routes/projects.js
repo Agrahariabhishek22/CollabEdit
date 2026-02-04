@@ -24,7 +24,7 @@ router.get("/", protect, (req, res) => {
  * @desc    Create a new project
  * @access  Private
  */
-router.post("/upload", protect,upload.array('projectFiles'), createAndUploadProject)
+router.post("/upload", protect,upload.array('files',1000), createAndUploadProject)
 
 /**
  * @route   GET /api/projects/:projectId

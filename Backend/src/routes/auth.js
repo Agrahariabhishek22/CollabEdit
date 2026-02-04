@@ -17,14 +17,14 @@ const router = express.Router();
  * @desc    Register a new user
  * @access  Public
  */
-router.post("/signup", signupLimiter, signup);
+router.post("/signup", signup);
 
 /**
  * @route   POST /api/auth/login
  * @desc    Login user and get token
  * @access  Public
  */
-router.post("/login", loginLimiter, login);
+router.post("/login", login);
 
 /**
  * @route   POST /api/auth/logout

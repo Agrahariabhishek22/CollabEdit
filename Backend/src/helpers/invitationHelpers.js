@@ -8,7 +8,6 @@ import { getRedisClient } from "../config/redis.js";
 import { getIO } from "../config/socketio.js";
 
 const redis = getRedisClient();
-const io = getIO();
 
 // ============================================================================
 // 1. RECURSIVE FILE TREE OPERATIONS
@@ -100,12 +99,17 @@ export const updateCollaboratorRecursive = async (
  * Returns: { isActive, fileId, projectId, currentMode }
  */
 export const getUserActiveSession = async (userId) => {
+  const redis= getRedisClient();
+  console.log("Checking active session for user:", userId);
+  
   const sessionKey = `user:session:${userId}`;
+  console.log(redis);
+  
   const session = await redis.get(sessionKey);
   return session ? JSON.parse(session) : null;
 };
 
-/**
+/** 
  * Enforce permission change immediately
  * If user is editing affected file, kick them or downgrade
  */
@@ -209,6 +213,8 @@ export const broadcastToResource = async (
   data,
   excludeUserId = null
 ) => {
+  const io = getIO();
+
   const room = `resource:${resourceId}`;
   const emitter = excludeUserId
     ? io.to(room).except(`user:${excludeUserId}`)
@@ -271,6 +277,7 @@ export const processDelta = async (deltaArray) => {
     upgrades: [],      // { userId, oldMode, newMode }
     downgrades: [],    // { userId, oldMode, newMode }
   };
+// console.log(deltaArray);
 
   for (const delta of deltaArray) {
     const user = await prisma.user.findUnique({
@@ -281,6 +288,7 @@ export const processDelta = async (deltaArray) => {
       // User doesn't exist, skip
       continue;
     }
+console.log(user);
 
     if (delta.previous_mode === null && delta.modified_mode !== null) {
       // New invite
@@ -316,6 +324,8 @@ export const processDelta = async (deltaArray) => {
       }
     }
   }
+  // console.log("inside processDekta of invitation ",changes);
+  
 
   return changes;
 };

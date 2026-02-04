@@ -10,87 +10,89 @@ generator client {
 
 // 1. User: Entry point for the Dashboard
 model User {
-  id            String    @id @default(uuid())
-  name          String
-  email         String    @unique
-  password      String
-  
+  id       String @id @default(uuid())
+  name     String
+  email    String @unique
+  password String
+
   // Dashboard index: Projects the user can access directly
-  accessibleProjectIds String[] 
-  
+  accessibleProjectIds String[]
+
   // Relations
-  ownedProjects Project[]  @relation("ProjectOwner")
+  ownedProjects Project[]      @relation("ProjectOwner")
   checkpoints   Checkpoint[]
+  logs          ProjectLog[]
   notifications Notification[] @relation("ReceiverRelation")
   sentNotifs    Notification[] @relation("SenderRelation")
-  
-  createdAt     DateTime   @default(now())
+
+  createdAt DateTime @default(now())
 }
 
 // 2. Project: The Root Container (Repo Level)
 model Project {
-  id            String    @id @default(uuid())
-  name          String
-  description   String?
-  rootPath      String    // Physical location on server disk
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  rootPath    String // Physical location on server disk
 
   // NEW: Direct reference to the top-most folder/file
-  rootFileMetaId    String?     @unique
-  rootFileMeta      FileMeta?   @relation("ProjectRoot", fields: [rootFileMetaId], references: [id])
-  
+  rootFileMetaId String?   @unique
+  rootFileMeta   FileMeta? @relation("ProjectRoot", fields: [rootFileMetaId], references: [id])
+
   // Global Git Info (Moved from file-level to avoid redundancy)
-  sourceType    SourceType @default(UI_CREATED)
-  remoteUrl     String?    // GitHub/GitLab link
-  currentBranch String     @default("main")
-  isBranchLocked Boolean   @default(false)
+  sourceType     SourceType @default(UI_CREATED)
+  remoteUrl      String? // GitHub/GitLab link
+  currentBranch  String     @default("main")
+  isBranchLocked Boolean    @default(false)
   lockAcquiredAt DateTime?
-  
-  ownerId       String
-  owner         User       @relation("ProjectOwner", fields: [ownerId], references: [id])
-  
-  files         FileMeta[]
-  createdAt     DateTime   @default(now())
+
+  ownerId String
+  owner   User   @relation("ProjectOwner", fields: [ownerId], references: [id])
+
+  files     FileMeta[]
+  createdAt DateTime     @default(now())
+  logs      ProjectLog[]
 }
 
 // 3. FileMeta: Hierarchical structure for Tree UI
 model FileMeta {
-  id            String    @id @default(uuid())
-  projectId     String
-  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   // NEW: Back-relation for the project root
-  isRootOfProject   Project?    @relation("ProjectRoot")
-  
-  name          String
-  extension     String?   // NULL for folders
-  isFolder      Boolean   @default(false)
-  isDeleted     Boolean   @default(false)
-  absolutePath  String    @unique // Required for Disk/Git sync
-  
+  isRootOfProject Project? @relation("ProjectRoot")
+
+  name         String
+  extension    String? // NULL for folders
+  isFolder     Boolean @default(false)
+  isDeleted    Boolean @default(false)
+  absolutePath String  @unique // Required for Disk/Git sync
+
   // Hierarchy Logic
-  parentId      String?
-  parent        FileMeta?  @relation("Hierarchy", fields: [parentId], references: [id])
-  children      FileMeta[] @relation("Hierarchy")
+  parentId String?
+  parent   FileMeta?  @relation("Hierarchy", fields: [parentId], references: [id])
+  children FileMeta[] @relation("Hierarchy")
 
   // Specialized Sub-Tables
-  gitContext    GitContext?  
-  editorState   EditorState? 
-  
-  creatorId     String
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  gitContext  GitContext?
+  editorState EditorState?
+
+  creatorId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Feature Connections
-  checkpoints   Checkpoint[]
-  activityLogs  ActivityLog[]
+  checkpoints        Checkpoint[]
+  activityLogs       ActivityLog[]
   collaboratorDetail CollaboratorDetail?
 }
 
 // 4. GitContext: File-specific status only
 model GitContext {
-  id             String    @id @default(uuid())
-  fileMetaId     String    @unique
-  fileMeta       FileMeta  @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  fileMetaId String   @unique
+  fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
 
   status         GitStatus @default(UNTRACKED)
   isIgnored      Boolean   @default(false)
@@ -101,12 +103,12 @@ model GitContext {
 
 // 5. EditorState: Real-time and Raw content
 model EditorState {
-  id             String    @id @default(uuid())
-  fileMetaId     String    @unique
-  fileMeta       FileMeta  @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  fileMetaId String   @unique
+  fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
 
-  content        String?   @db.Text // Plain text for search/LSP
-  binaryText     Bytes?    // Yjs binary for CRDT sync persistence
+  content    String? @db.Text // Plain text for search/LSP
+  binaryText Bytes? // Yjs binary for CRDT sync persistence
 }
 
 // 6. CollaboratorDetail: Granular/Recursive Roles
@@ -114,11 +116,11 @@ model CollaboratorDetail {
   id         String   @id @default(uuid())
   fileMetaId String   @unique
   fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
-  adminId    String   // The primary creator
+  adminId    String // The primary creator
   editors    String[] // Array of User IDs with write access
   viewers    String[] // Array of User IDs with read-only access
-  
-  updatedAt  DateTime @updatedAt
+
+  updatedAt DateTime @updatedAt
 }
 
 // 7. ActivityLog: 100 most recent operations
@@ -126,13 +128,13 @@ model ActivityLog {
   id         String   @id @default(uuid())
   fileMetaId String
   fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
-  
-  userId     String
-  opType     OpType
-  summary    String?  
-  diffPatch  String?  @db.Text 
-  
-  timestamp  DateTime @default(now())
+
+  userId    String
+  opType    OpType
+  summary   String?
+  diffPatch String? @db.Text
+
+  timestamp DateTime @default(now())
 }
 
 // 8. Checkpoint: Single per-user safety slot
@@ -140,32 +142,67 @@ model Checkpoint {
   id         String   @id @default(uuid())
   fileMetaId String
   fileMeta   FileMeta @relation(fields: [fileMetaId], references: [id], onDelete: Cascade)
-  
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  
-  content    String?  @db.Text
-  binaryText Bytes?   
-  
-  timestamp  DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  content    String? @db.Text
+  binaryText Bytes?
+
+  timestamp DateTime @default(now())
 
   @@unique([fileMetaId, userId]) // Overwrites previous per user
 }
 
 // 9. Notification: Real-time system events
 model Notification {
-  id         String   @id @default(uuid())
+  id         String @id @default(uuid())
   receiverId String
-  receiver   User     @relation("ReceiverRelation", fields: [receiverId], references: [id])
+  receiver   User   @relation("ReceiverRelation", fields: [receiverId], references: [id])
+
+  senderId String
+  sender   User   @relation("SenderRelation", fields: [senderId], references: [id])
+
+  type    NotifType
+  status  NotifStatus @default(PENDING)
+  message String
   
-  senderId   String
-  sender     User     @relation("SenderRelation", fields: [senderId], references: [id])
+  // Context tracking for action buttons
+  resourceId    String?
+  resourceName  String?
+  resourceType  String?   // 'PROJECT' | 'FOLDER' | 'FILE'
+  actionMode    String?   // 'EDITOR' | 'VIEWER' | 'ADMIN'
+  oldMode       String?   // For DOWNGRADE/UPGRADE
   
-  type       NotifType
-  status     NotifStatus @default(PENDING)
-  message    String
+  // Edge case: Track if invite was revoked
+  isRevoked     Boolean   @default(false)
+  revokedAt     DateTime?
   
-  createdAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+}
+
+model ProjectLog { 
+  id        String  @id @default(uuid())
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  userId String // Kisne kiya
+  user   User   @relation(fields: [userId], references: [id])
+
+  // High-level Actions: FILE_ADD, FILE_RENAME, FILE_DELETE, FOLDER_ADD, FOLDER_RENAME, FOLDER_DELETE, INVITE_SENT, INVITE_REVOKE, PERMISSION_CHANGE
+  actionType String
+
+  // Specific file/folder jis par action hua (nullable for non-file actions)
+  fileMetaId String?
+  fileName   String? // For easy UI display
+
+  // Detailed JSON: { oldName, newName, targetUserEmail, mode, branchName (for git), etc. }
+  details Json?
+
+  timestamp DateTime @default(now())
+
+  @@index([projectId, timestamp])
+  @@index([userId])
 }
 
 // --- Enums ---
@@ -190,13 +227,18 @@ enum OpType {
 }
 
 enum NotifType {
-  INVITE
-  REVOKE
-  CONFLICT_ALERT
+  INVITE_RECEIVED
+  INVITE_DECLINED
+  ACCESS_REVOKED
+  ACCESS_UPGRADED
+  ACCESS_DOWNGRADED
+  COLLAB_JOINED
+  COLLAB_LEFT
 }
 
 enum NotifStatus {
   PENDING
-  ACCEPTED
   READ
+  ACCEPTED
+  DECLINED
 }

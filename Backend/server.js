@@ -19,6 +19,8 @@ import projectRoutes from "./src/routes/projects.js";
 import fileRoutes from "./src/routes/files.js";
 import gitRoutes from "./src/routes/git.js";
 import inviteRoutes from "./src/routes/inviteRoute.js";
+import explorerRoutes from "./src/routes/explorerRoutes.js"
+import notificationRoutes from "./src/routes/notificationRoutes.js";
 // Import Socket.io handlers
 import {
   socketAuth,
@@ -28,7 +30,7 @@ import {
   handleJoinProject,
   handleLeaveProject,
   handleError,
-} from "./src/socket/handlers/connectionHandler.js";
+} from "./src/socket/handlers/connectionHandler.js"; 
 
 const app = express();
 const server = http.createServer(app);
@@ -83,6 +85,8 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/files", fileRoutes);
 app.use("/api/git", gitRoutes);
 app.use("/api/invitations",inviteRoutes);
+app.use("/api/explorer",explorerRoutes)
+app.use("/api/notifications",notificationRoutes)
 
 // ============ 404 HANDLER ============
 app.use((req, res) => {

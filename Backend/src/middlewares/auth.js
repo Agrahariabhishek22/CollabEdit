@@ -53,10 +53,4 @@ export const isAdmin = (req, res, next) => {
   }
 };
 
-export const isOwner = asyncHandler(async (req, res, next) => {
-  if (req.user && req.user.id === req.params.userId) {
-    next();
-  } else {
-    throw new AppError("You don't have permission to access this resource", 403);
-  }
-});
+ 

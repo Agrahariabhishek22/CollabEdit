@@ -1,9 +1,9 @@
 import path from "path";
 import fs from "fs";
 import { asyncHandler, AppError } from "../middlewares/errorHandler.js";
-import { getPrismaClient } from "../config/database.js";
+import { prisma } from "../config/database.js";
+import { log } from "console";
 
-const prisma = getPrismaClient();
 const IGNORED_FOLDERS = [
   "node_modules",
   ".git",
@@ -38,25 +38,27 @@ const isIgnored = (path) => {
   );
 };
 
+// marked to understand
 export const createAndUploadProject = asyncHandler(async (req, res) => {
   const { projectName, description } = req.body;
   const files = req.files;
   const userId = req.user.id;
+  const paths = req.body.paths;
 
   if (!files || files.length === 0) throw new AppError("No files found", 400);
 
-  // 1. Project Initialization
+  // 1. Create Project Entry
   const project = await prisma.project.create({
     data: {
       name: projectName,
       description,
       ownerId: userId,
-      rootPath: "temp",
+      rootPath: "pending",
     },
   });
-  let rootMetaId = null;
 
   const projectRoot = path.join(process.env.STORAGE_PATH, project.id);
+  // Ensure Project Root exists
   if (!fs.existsSync(projectRoot))
     fs.mkdirSync(projectRoot, { recursive: true });
 
@@ -65,86 +67,81 @@ export const createAndUploadProject = asyncHandler(async (req, res) => {
     data: { rootPath: projectRoot },
   });
 
-  // folderCache store karega pathSoFar -> metaId taaki parentId fetch ho sake
   const folderCache = new Map();
+  let rootMetaId = null;
 
-  // 2. Transactional Hierarchy Reconstruction
-  await prisma.$transaction(async (tx) => {
-    for (const file of files) {
-      // Frontend ko 'originalname' mein full path bhejna hoga (e.g. "my-project/src/index.js")
-      const relativePath = file.originalname;
+  // 2. Process Files One by One
+  for (let index = 0; index < files.length; index++) {
+    // browser 'fullPath' ya 'originalname' mein relative path bhejta hai
+    const file = files[index];
+    const relativePath = Array.isArray(paths) ? paths[index] : paths;
+    console.log(relativePath);
 
-      if (isIgnored(relativePath)) continue;
+    if (isIgnored(relativePath)) {
+      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      continue;
+    }
 
-      const parts = relativePath.split(/[\\/]/);
-      let currentParentId = null;
+    const parts = relativePath.split(/[\\/]/);
+    let currentParentId = null;
 
-      // "my-project/src/index.js" ko parts mein todkar traverse karna
-      for (let i = 0; i < parts.length; i++) {
-        const partName = parts[i];
-        const isFolder = i < parts.length - 1;
-        const pathSoFar = parts.slice(0, i + 1).join("/");
+    // Path tree build karna (e.g., src -> components -> App.js)
+    for (let i = 0; i < parts.length; i++) {
+      const partName = parts[i];
+      const isFolder = i < parts.length - 1;
+      const pathSoFar = parts.slice(0, i + 1).join("/");
 
-        if (!folderCache.has(pathSoFar)) {
-          const fullPhysicalPath = path.join(projectRoot, pathSoFar);
+      // Full Physical Path for this specific part
+      const fullPhysicalPath = path.join(projectRoot, pathSoFar);
 
-          // A. Disk Management
-          if (isFolder) {
-            if (!fs.existsSync(fullPhysicalPath)) {
-              fs.mkdirSync(fullPhysicalPath, { recursive: true });
-            }
-          } else {
-            // Ensure child file se pehle uska physical parent folder disk pr ho
-            const dirName = path.dirname(fullPhysicalPath);
-            if (!fs.existsSync(dirName))
-              fs.mkdirSync(dirName, { recursive: true });
-            fs.writeFileSync(fullPhysicalPath, file.buffer);
+      if (!folderCache.has(pathSoFar)) {
+        // --- DISK CREATION ---
+        if (isFolder) {
+          if (!fs.existsSync(fullPhysicalPath)) {
+            fs.mkdirSync(fullPhysicalPath, { recursive: true });
           }
+        } else {
+          // It's a file: ensure parent directory exists just in case
+          const dirName = path.dirname(fullPhysicalPath);
+          if (!fs.existsSync(dirName))
+            fs.mkdirSync(dirName, { recursive: true });
 
-          // B. Database Hierarchy (The Real Tree)
-          const meta = await tx.fileMeta.create({
-            data: {
-              name: partName,
-              isFolder,
-              projectId: project.id,
-              parentId: currentParentId, // Pichle loop ka ID automatically parent banega
-              absolutePath: fullPhysicalPath,
-              creatorId: userId,
-              ...(!isFolder && {
-                editorState: {
-                  create: { content: file.buffer.toString("utf-8") },
-                },
-              }),
-            },
-          });
-
-          // C. Recursive Permission Allocation
-          await tx.collaboratorDetail.create({
-            data: { fileMetaId: meta.id, adminId: userId },
-          });
-          if (i === 0 && !rootMetaId) {
-            rootMetaId = meta.id;
-          }
-
-          // Metadata ID save kar lo agle child ke liye
-          folderCache.set(pathSoFar, meta.id);
+          // MOVE: Temp Multer storage to Final Project folder
+          fs.renameSync(file.path, fullPhysicalPath);
         }
 
-        // Is loop ka current meta ID, agle iteration ke liye currentParentId ban jayega
-        currentParentId = folderCache.get(pathSoFar);
+        // --- DATABASE ENTRY ---
+        const meta = await prisma.fileMeta.create({
+          data: {
+            name: partName,
+            isFolder,
+            projectId: project.id,
+            parentId: currentParentId,
+            absolutePath: fullPhysicalPath,
+            creatorId: userId,
+          },
+        });
+        await prisma.collaboratorDetail.create({
+          data: { fileMetaId: meta.id, adminId: userId },
+        });
+        // Agar i=0 hai toh ye root folder ya root file hai
+        if (i === 0 && !rootMetaId) rootMetaId = meta.id;
+
+        // Cache this meta ID for its children
+        folderCache.set(pathSoFar, meta.id);
       }
+
+      // Update parent ID for the next part in the path
+      currentParentId = folderCache.get(pathSoFar);
     }
-    await tx.project.update({
-      where: { id: project.id },
-      data: {
-        rootFileMetaId: rootMetaId,
-      },
-    });
+  }
+
+  // Update Project with the root meta ID
+  await prisma.project.update({
+    where: { id: project.id },
+    data: { rootFileMetaId: rootMetaId },
   });
 
-  res.status(201).json({
-    success: true,
-    message: "Project tree reconstructed successfully",
-    projectId: project.id,
-  });
+  res.status(201).json({ success: true, projectId: project.id });
 });
+ 

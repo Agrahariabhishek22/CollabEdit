@@ -1,44 +1,33 @@
-// Files Routes (Stub for Day 2)
 import express from "express";
-import { protect } from "../middlewares/auth.js";
+import { protect } from "../middlewares/auth.js"; // .js extension zaroori hai ESM mein
+import {
+  createFileOrFolder,
+  renameFileOrFolder,
+  deleteFileOrFolder,
+} from "../controllers/fileController.js";
 
 const router = express.Router();
 
-/**
- * @route   GET /api/files/:projectId
- * @desc    Get all files in a project
- * @access  Private
- */
-router.get("/:projectId", protect, (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Get files - Coming soon",
-    data: [],
-  });
-});
+// Protect all routes with authentication
+// Note: 'protect' use kiya hai jo upar import hua hai
+router.use(protect);
 
 /**
- * @route   POST /api/files/open
- * @desc    Open a file for editing
- * @access  Private
+ * POST /api/files/create
+ * Create a new file or folder in an existing project
  */
-router.post("/open", protect, (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Open file - Coming soon",
-  });
-});
+router.post("/create", createFileOrFolder);
 
 /**
- * @route   POST /api/files/close
- * @desc    Close a file
- * @access  Private
+ * PATCH /api/files/rename
+ * Rename a file or folder
  */
-router.post("/close", protect, (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Close file - Coming soon",
-  });
-});
+router.patch("/rename", renameFileOrFolder);
+
+/**
+ * DELETE /api/files/delete
+ * Soft-delete a file or folder
+ */
+router.delete("/delete", deleteFileOrFolder);
 
 export default router;

@@ -21,7 +21,7 @@ export const config = {
   JWT_REFRESH_EXPIRE: process.env.JWT_REFRESH_EXPIRE || "30d",
 
   // Session
-  SESSION_TTL: parseInt(process.env.SESSION_TTL || "1800"), // 30 minutes in seconds
+  SESSION_TTL: parseInt(process.env.SESSION_TTL || "1800000"), // 30 minutes in seconds
   HEARTBEAT_INTERVAL: parseInt(process.env.HEARTBEAT_INTERVAL || "60000"), // 60 seconds in ms
 
   // CORS
