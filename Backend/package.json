@@ -15,8 +15,10 @@
     "@prisma/client": "^6.19.2",
     "@socket.io/redis-adapter": "^8.3.0",
     "bcryptjs": "^3.0.3",
+    "cookie": "^1.1.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
+    "crypto": "^1.0.1",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
@@ -25,7 +27,8 @@
     "redis": "^5.10.0",
     "simple-git": "^3.30.0",
     "socket.io": "^4.8.3",
-    "socket.io-redis": "^5.4.0"
+    "socket.io-redis": "^5.4.0",
+    "yjs": "^13.6.29"
   },
   "devDependencies": {
     "nodemon": "^3.1.11",

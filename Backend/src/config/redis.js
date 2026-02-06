@@ -4,11 +4,12 @@ import { config } from "./env.js";
 
 let redisClient = null;
 let redisSubscriber = null;
+let redisPubSub = null; // NEW: Dedicated Pub/Sub client for Yjs updates
 
 export const connectRedis = async () => {
   try {
     const clientConfig = {
-      url: `redis://${config.REDIS_PASSWORD ? `:${config.REDIS_PASSWORD}@` : ''}${config.REDIS_HOST}:${config.REDIS_PORT}`,
+      url: `redis://${config.REDIS_PASSWORD ? `:${config.REDIS_PASSWORD}@` : ""}${config.REDIS_HOST}:${config.REDIS_PORT}`,
       // Ya fir socket use karo (Zyada reliable in Docker)
       socket: {
         host: config.REDIS_HOST,
@@ -16,10 +17,10 @@ export const connectRedis = async () => {
         reconnectStrategy: (retries) => {
           if (retries > 10) return new Error("Max retries reached");
           return Math.min(retries * 100, 3000);
-        }
-      }
+        },
+      },
     };
-    redisClient =createClient(clientConfig);
+    redisClient = createClient(clientConfig);
 
     redisClient.on("error", (err) => console.error("Redis Client Error:", err));
     redisClient.on("connect", () => console.log("✓ Redis Client Connected"));
@@ -28,13 +29,23 @@ export const connectRedis = async () => {
 
     // Separate subscriber for pub/sub
     redisSubscriber = createClient(clientConfig);
-    
-    redisSubscriber.on("error", (err) => console.error("Redis Subscriber Error:", err));
-    await redisSubscriber.connect();
 
+    redisSubscriber.on("error", (err) =>
+      console.error("Redis Subscriber Error:", err),
+    );
+    await redisSubscriber.connect();
     console.log("✓ Redis Subscriber Connected");
 
-    return { redisClient, redisSubscriber };
+    redisPubSub = createClient(clientConfig);
+
+    redisPubSub.on("error", (err) =>
+      console.error("Redis Pub/Sub Error:", err),
+    );
+    await redisPubSub.connect();
+
+    console.log("✓ Redis Pub/Sub Connected");
+
+    return { redisClient, redisSubscriber, redisPubSub };
   } catch (error) {
     console.error("Failed to connect to Redis:", error);
     throw error;
@@ -45,7 +56,11 @@ export const connectRedis = async () => {
 export const setSession = async (userId, sessionData) => {
   try {
     const key = `session:${userId}`;
-    await redisClient.setEx(key, config.SESSION_TTL, JSON.stringify(sessionData));
+    await redisClient.setEx(
+      key,
+      config.SESSION_TTL,
+      JSON.stringify(sessionData),
+    );
     return true;
   } catch (error) {
     console.error("Error setting session:", error);
@@ -136,9 +151,57 @@ export const setHeartbeat = async (userId, projectId) => {
 };
 
 // Get Redis client instance
-export const getRedisClient = () => redisClient;
+// ════════════════════════════════════════════════════════════
+// NEW HELPER FUNCTIONS (For Services Integration)
+// ════════════════════════════════════════════════════════════
 
-export const getRedisSubscriber = () => redisSubscriber;
+/**
+ * Get main Redis client
+ * Used by: SessionManager, YjsDocManager, LSPManager
+ */
+export const getRedisClient = () => {
+  if (!redisClient) {
+    throw new Error("Redis client not initialized");
+  }
+  return redisClient;
+};
+
+/**
+ * Get subscriber client (for Socket.io adapter)
+ * Used by: Socket.io Redis Adapter (existing logic)
+ */
+export const getRedisSubscriber = () => {
+  if (!redisSubscriber) {
+    throw new Error("Redis subscriber not initialized");
+  }
+  return redisSubscriber;
+};
+
+/**
+ * Get Pub/Sub client (for Yjs horizontal scaling)
+ * Used by: YjsHandler to broadcast updates across servers
+ */
+export const getRedisPubSub = () => {
+  if (!redisPubSub) {
+    throw new Error("Redis Pub/Sub not initialized");
+  }
+  return redisPubSub;
+};
+
+// ════════════════════════════════════════════════════════════
+// GRACEFUL SHUTDOWN
+// ════════════════════════════════════════════════════════════
+
+export const disconnectRedis = async () => {
+  try {
+    if (redisClient) await redisClient.quit();
+    if (redisSubscriber) await redisSubscriber.quit();
+    if (redisPubSub) await redisPubSub.quit();
+    console.log("✓ Redis disconnected");
+  } catch (error) {
+    console.error("Error disconnecting Redis:", error);
+  }
+};
 
 export default {
   connectRedis,
@@ -152,4 +215,6 @@ export default {
   setHeartbeat,
   getRedisClient,
   getRedisSubscriber,
+  getRedisPubSub,
+  disconnectRedis,
 };

@@ -7,7 +7,7 @@ export const getExplorerRoot = asyncHandler(async (req, res) => {
   // 1. Fetch User with his accessible projects
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { accessibleProjectIds: true }
+    select: { accessibleProjectIds: true },
   });
 
   // 2. Fetch Root FileMetas of:
@@ -17,25 +17,26 @@ export const getExplorerRoot = asyncHandler(async (req, res) => {
     where: {
       OR: [
         { isRootOfProject: { ownerId: userId } }, // Owned
-        { id: { in: user.accessibleProjectIds } } // Shared Roots
+        { id: { in: user.accessibleProjectIds } }, // Shared Roots
       ],
-      isDeleted: false
+      isDeleted: false,
     },
     include: {
       collaboratorDetail: true, // For mode of access
       project: {
-        select: { name: true, sourceType: true } // Project context
-      }
-    }
+        select: { name: true, sourceType: true }, // Project context
+      },
+    },
   });
+  // console.log(rootFiles);
 
   // 3. Map to include "Access Mode" (Admin, Editor, or Viewer)
- const formattedRoots = rootFiles.reduce((acc, file) => {
+  const formattedRoots = rootFiles.reduce((acc, file) => {
     let mode = null;
 
     // Check permissions strictly from CollaboratorDetail
     const collab = file.collaboratorDetail;
-    
+
     if (collab) {
       if (collab.adminId === userId) {
         mode = "ADMIN";
@@ -56,7 +57,7 @@ export const getExplorerRoot = asyncHandler(async (req, res) => {
         parentId: file.parentId,
         sourceType: file.project?.sourceType,
         accessMode: mode, // Hamara calculated mode
-        updatedAt: file.updatedAt
+        updatedAt: file.updatedAt,
       });
     }
 
@@ -74,12 +75,12 @@ export const getFolderContents = asyncHandler(async (req, res) => {
   const contents = await prisma.fileMeta.findMany({
     where: {
       parentId: folderId,
-      isDeleted: false
+      isDeleted: false,
     },
     include: {
-      collaboratorDetail: true
+      collaboratorDetail: true,
     },
-    orderBy: { isFolder: 'desc' } // Folders pehle dikhe frontend pr
+    orderBy: { isFolder: "desc" }, // Folders pehle dikhe frontend pr
   });
 
   // 2. Formatting the response with collaboration details
@@ -108,7 +109,7 @@ export const getFolderContents = asyncHandler(async (req, res) => {
         projectId: item.projectId,
         parentId: item.parentId,
         accessMode: mode,
-        updatedAt: item.updatedAt
+        updatedAt: item.updatedAt,
       });
     }
 
@@ -117,9 +118,3 @@ export const getFolderContents = asyncHandler(async (req, res) => {
 
   res.status(200).json({ success: true, data: formattedContents });
 });
-
-
-
-
-
-

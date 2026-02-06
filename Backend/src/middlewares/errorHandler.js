@@ -34,6 +34,17 @@ export const errorHandler = (err, req, res, next) => {
     const message = "Token has expired";
     err = new AppError(message, 400);
   }
+  console.error("─── [ERROR LOG] ───");
+  console.error(`Timestamp: ${new Date().toISOString()}`);
+  console.error(`Method: ${req.method} | URL: ${req.originalUrl}`);
+  console.error(`Message: ${err.message}`);
+  
+  // 2. Stack Trace (Ye batayega ki error kis file ki kis line par hai)
+  // Production mein stack trace hide karna chahiye security ke liye
+  if (process.env.NODE_ENV === 'development') {
+    console.error(`Stack: ${err.stack}`);
+  }
+  console.error("───────────────────");
 
   res.status(err.statusCode).json({
     success: false,

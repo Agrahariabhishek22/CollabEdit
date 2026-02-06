@@ -14,7 +14,6 @@ import {
   getResourceType,
 } from "../helpers/invitationHelpers.js";
 
-const redis = getRedisClient();
 
 /**
  * HELPER: Create ProjectLog entry for invitation operations

@@ -22,40 +22,39 @@ const Signup = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    // ✅ Client-side basic check
-    if (formData.password !== formData.confirmPassword) {
-      return alert("Passwords match nahi ho rahe bhai!");
-    }
+  // ✅ Client-side check
+  if (formData.password !== formData.confirmPassword) {
+    return alert("Passwords match nahi ho rahe bhai!");
+  }
 
-    setIsLoading(true);
-    try {
-      const salt = bcrypt.genSaltSync(10);
-      const hashedPwd = bcrypt.hashSync(formData.password, salt);
+  setIsLoading(true);
+  try {
+    // ❌ Bcrypt/Salt logic yahan se poori tarah khatam
+    // ✅ Seedha formData bhej rahe hain
+    const response = await API.post("/auth/signup", formData);
 
-      const signupData = {
-        ...formData,
-        password: hashedPwd,
-        confirmPassword: hashedPwd, // Dono hashed hone chahiye validation pass karne` ke liye
-      };
-
-      const response = await API.post("/auth/signup", signupData);
-
-      if (response.data.success) {
-        console.log("Signup Success:", response.data.message);
-        alert("Account ban gaya!");
-        navigate("/dashboard");
+    if (response.data.success) {
+      // Signup ke baad agar token mil raha hai toh save kar lo
+      if (response.data.data?.token) {
+        localStorage.setItem('token', response.data.data.token);
+        localStorage.setItem('user', JSON.stringify(response.data.data.user));
       }
-    } catch (error) {
-      const errMsg = error.response?.data?.message || "Signup failed";
-      alert(errMsg);
-      console.error("Signup Error:", errMsg);
-    } finally {
-      setIsLoading(false);
+      
+      console.log("Signup Success:", response.data.message);
+      alert("Account ban gaya!");
+      navigate("/dashboard");
     }
-  };
+  } catch (error) {
+    const errMsg = error.response?.data?.message || "Signup failed";
+    alert(errMsg);
+    console.error("Signup Error:", errMsg);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 selection:bg-indigo-500/30">

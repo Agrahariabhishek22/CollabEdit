@@ -7,80 +7,58 @@ import { config } from "../config/env.js";
 import { AppError, asyncHandler } from "../middlewares/errorHandler.js";
 
 
-// Generate JWT Token
-const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, config.JWT_SECRET, {
-    expiresIn: config.JWT_EXPIRE,
-  });
+// Pehle: const generateToken = (id) => ...
+// Ab: Aise likho
+export const generateToken = (payload) => {
+  return jwt.sign(
+    payload, // Ab isme id, name, email teeno honge
+    config.JWT_SECRET,
+    { expiresIn: '7d' }
+  );
 };
 
 // Signup Controller
+// Signup Controller
 export const signup = asyncHandler(async (req, res) => {
-    console.log("inside signup controller");
-    
   const { name, email, password, confirmPassword } = req.body;
 
-  // Validation
   if (!name || !email || !password || !confirmPassword) {
-    throw new AppError("Please provide all required fields", 400);
+    throw new AppError("Bhai, saari details bharna zaroori hai!", 400);
   }
 
   if (password !== confirmPassword) {
-    throw new AppError("Passwords do not match", 400);
+    throw new AppError("Passwords match nahi kar rahe", 400);
   }
 
-  // Check if user already exists
-  const existingUser = await prisma.user.findUnique({
-    where: { email },
-  });
-
+  const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
-    throw new AppError("User already exists with this email", 409);
+    throw new AppError("Is email se pehle hi account bana hua hai", 409);
   }
 
-  // Hash password
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Create user
   const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      password: hashedPassword,
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      createdAt: true,
-    },
+    data: { name, email, password: hashedPassword },
+    select: { id: true, name: true, email: true }, // Password return nahi karna
   });
 
-  // Generate token
-  const token = generateToken(user.id);
+  const token = generateToken({ id: user.id, name: user.name, email: user.email });
 
-  // Store session in Redis
-  await setSession(user.id, {
-    userId: user.id,
-    email: user.email,
-    loginAt: new Date(),
-  });
+  // Redis Session
+  await setSession(user.id, { userId: user.id, email: user.email, loginAt: new Date() });
 
-  // Set cookie
   res.cookie("token", token, {
     httpOnly: true,
     secure: config.NODE_ENV === "production",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     sameSite: "lax",
   });
+console.log(user,token);
 
-  res.status(201).json({
+  return res.status(201).json({
     success: true,
-    message: "User registered successfully",
-    data: {
-      user,
-      token,
-    },
+    message: "Account ban gaya bhai!",
+    data: { user, token },
   });
 });
 
@@ -88,57 +66,42 @@ export const signup = asyncHandler(async (req, res) => {
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  // Validation
   if (!email || !password) {
-    throw new AppError("Please provide email and password", 400);
+    throw new AppError("Email aur Password dono chahiye", 400);
   }
 
-  // Find user
-  const user = await prisma.user.findUnique({
-    where: { email },
-  });
+  // Pure user object ko fetch karein (taaki password mile)
+  const user = await prisma.user.findUnique({ where: { email } });
 
+  // Security tip: Dono cases mein 401 aur same message
   if (!user) {
-    throw new AppError("User not found", 404);
+    throw new AppError("Email ya Password galat hai", 401);
   }
 
-  // Compare password
   const isPasswordValid = await bcrypt.compare(password, user.password);
-
   if (!isPasswordValid) {
-    throw new AppError("Invalid password", 401);
+    throw new AppError("Email ya Password galat hai", 401);
   }
 
-  // Generate token
-  const token = generateToken(user.id);
+  const token = generateToken({ id: user.id, name: user.name, email: user.email });
 
-  // Store session in Redis
-  await setSession(user.id, {
-    userId: user.id,
-    email: user.email,
-    loginAt: new Date(),
-  });
+  await setSession(user.id, { userId: user.id, email: user.email, loginAt: new Date() });
 
-  // Set cookie
   res.cookie("token", token, {
     httpOnly: true,
     secure: config.NODE_ENV === "production",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     sameSite: "lax",
   });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
-    message: "Login successful",
+    message: "Login successful!",
     data: {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-      },
+      user: { id: user.id, name: user.name, email: user.email },
       token,
     },
-  });
+  }); 
 });
 
 // Logout Controller

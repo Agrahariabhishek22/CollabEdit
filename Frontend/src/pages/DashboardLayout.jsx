@@ -4,6 +4,7 @@ import EditorContainer from "../components/EditorContainer";
 import ContextMenu from "../components/ContextMenu";
 import HeaderStrip from "../components/HeaderStrip";
 import InvitationModal from "../modals/InvitationModal";
+import EditorPage from "./EditorPage";
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -13,10 +14,10 @@ export default function DashboardLayout() {
   const [contextMenu, setContextMenu] = useState(null);
   const [unreadNotifs, setUnreadNotifs] = useState(3); // Example live sync state
   const [inviteResource, setInviteResource] = useState(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0); 
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleSidebarRefresh = () => {
-    setRefreshTrigger(prev => prev + 1); // Key change hote hi Sidebar remount/refetch karega
+    setRefreshTrigger((prev) => prev + 1); // Key change hote hi Sidebar remount/refetch karega
   };
 
   // Sidebar se file select hone par logic
@@ -61,12 +62,13 @@ export default function DashboardLayout() {
 
         {/* Editor or Git Repo Dashboard */}
         <main className="flex-1 relative bg-slate-950">
-          <EditorContainer
+          {/* <EditorContainer
             selectedFile={selectedFile}
             activeView={activeView}
             openTabs={openTabs}
             setOpenTabs={setOpenTabs}
-          />
+          /> */}
+          <EditorPage selectedFile={selectedFile} projectId={selectedFile?.projectId||null} />
         </main>
       </div>
 

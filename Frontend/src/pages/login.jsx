@@ -15,36 +15,31 @@ const Login = () => {
     setCredentials((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!credentials.email || !credentials.password) return alert("Bhai, details to bhar de!");
+const handleLogin = async (e) => {
+  e.preventDefault();
+  if (!credentials.email || !credentials.password) return alert("Bhai, details to bhar de!");
+  
+  setIsLoading(true);
+  try {
+    // ❌ Bcrypt lines hata di hain
+    // ✅ Seedha credentials bhej rahe hain (Jisme plain email aur password hai)
+    const response = await API.post('/auth/login', credentials);
     
-    setIsLoading(true);
-    try {
-      const salt = "$2a$10$CwTycUXWue0Thq9StjUM0u"; // Fixed salt (Bad Practice)
-    const hashedPwd = bcrypt.hashSync(credentials.password, salt);
-
-    const loginData = {
-      ...credentials,
-      password: hashedPwd // Ab hashed jaayega
-    };
-      const response = await API.post('/auth/login', loginData);
+    if (response.data.success) {
+      localStorage.setItem('token', response.data.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.data.user));
       
-      if (response.data.success) {
-        localStorage.setItem('token', response.data.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
-        
-        console.log("Login Successful:", response.data.message);
-        navigate('/dashboard');
-      }
-    } catch (error) {
-      const errMsg = error.response?.data?.message || "Login failed";
-      alert(errMsg); 
-      console.error("Login Error:", errMsg);
-    } finally {
-      setIsLoading(false);
+      console.log("Login Successful:", response.data.message);
+      navigate('/dashboard');
     }
-  };
+  } catch (error) {
+    const errMsg = error.response?.data?.message || "Login failed";
+    alert(errMsg); 
+    console.error("Login Error:", errMsg);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 selection:bg-indigo-500/30">

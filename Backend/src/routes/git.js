@@ -1,6 +1,7 @@
 // Git Routes (Stub for Day 2)
 import express from "express";
 import { protect } from "../middlewares/auth.js";
+import { cloneGitRepository, switchBranch } from "../controllers/gitController.js";
 
 const router = express.Router();
 
@@ -9,25 +10,14 @@ const router = express.Router();
  * @desc    Clone a git repository
  * @access  Private
  */
-router.post("/clone", protect, (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Clone repository - Coming soon",
-  });
-});
+router.post("/clone", protect,cloneGitRepository);
 
 /**
  * @route   GET /api/git/branches/:projectId
  * @desc    Get all branches in a project
  * @access  Private
  */
-router.get("/branches/:projectId", protect, (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Get branches - Coming soon",
-    data: [],
-  });
-});
+router.get("/branches/:projectId",switchBranch);
 
 /**
  * @route   POST /api/git/checkout

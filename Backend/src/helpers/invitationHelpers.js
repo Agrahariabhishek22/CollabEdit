@@ -7,7 +7,7 @@ import { prisma } from "../config/database.js";
 import { getRedisClient } from "../config/redis.js";
 import { getIO } from "../config/socketio.js";
 
-const redis = getRedisClient();
+// const redis = getRedisClient();
 
 // ============================================================================
 // 1. RECURSIVE FILE TREE OPERATIONS
@@ -15,9 +15,11 @@ const redis = getRedisClient();
 
 /**
  * Get all descendant FileMeta IDs for a folder (BFS for performance)
- * WHY: Single batch query instead of recursive loops (N+1 prevention)
+ * WHY: Single batch query instead of recursive loops (N+1 prevention) 
  */
 export const getAllDescendantIds = async (parentFileMetaId) => {
+  const redis = getRedisClient();
+
   const result = [parentFileMetaId];
   const queue = [parentFileMetaId];
 
@@ -41,11 +43,14 @@ export const getAllDescendantIds = async (parentFileMetaId) => {
  * Called when: Admin adds/modifies/revokes permissions on a folder
  */
 export const updateCollaboratorRecursive = async (
+  
   parentFileMetaId,
   userId,
   newMode, // 'EDITOR' | 'VIEWER' | null (revoke)
   oldMode
 ) => {
+  const redis = getRedisClient();
+
   const descendantIds = await getAllDescendantIds(parentFileMetaId);
 
   // Single transaction: all or nothing
@@ -99,6 +104,7 @@ export const updateCollaboratorRecursive = async (
  * Returns: { isActive, fileId, projectId, currentMode }
  */
 export const getUserActiveSession = async (userId) => {
+  
   const redis= getRedisClient();
   console.log("Checking active session for user:", userId);
   
@@ -114,6 +120,7 @@ export const getUserActiveSession = async (userId) => {
  * If user is editing affected file, kick them or downgrade
  */
 export const enforcePermissionChange = async (
+
   userId,
   affectedFileMetaId,
   action, // 'DOWNGRADE' | 'REVOKE'
