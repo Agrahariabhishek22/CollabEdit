@@ -1,5 +1,3 @@
-// services/permissions/PermissionValidator.js
-
 export default class PermissionValidator {
   constructor(prisma, redis, sessionManager, io) {
     this.prisma = prisma;
@@ -7,32 +5,29 @@ export default class PermissionValidator {
     this.sessionManager = sessionManager;
     this.io = io;
   }
-
-  // ═══════════════════════════════════════════════════════════
-  // VALIDATE ACTION (Called on EVERY socket event)
-  // ═══════════════════════════════════════════════════════════
-
+setIo(io) {
+    this.io = io;
+    console.log("[SessionManager] Socket.io instance injected successfully.");
+  }
+  /**
+   * VALIDATE ACTION
+   * @param {string} userId 
+   * @param {string} fileId 
+   * @param {string} action - 'READ' | 'EDIT' | 'DELETE' | 'SHARE' | 'CHECKPOINT'
+   */
   async validateAction(userId, fileId, action) {
-    /**
-     * Actions:
-     * - 'READ'   → All modes allowed
-     * - 'EDIT'   → ADMIN, EDITOR only
-     * - 'DELETE' → ADMIN only
-     * - 'SHARE'  → ADMIN only
-     */
-
-    // Step 1: Get current access mode from DB (source of truth)
+    // 1. Get the source of truth from DB
     const access = await this.getAccessMode(userId, fileId);
     
     if (!access) {
       return {
         allowed: false,
         reason: 'NO_ACCESS',
-        message: 'You do not have access to this file',
+        message: 'Bhai, is file ka access nahi hai tumhare paas.',
       };
     }
 
-    // Step 2: Check if action is allowed
+    // 2. Permission Map (Based on your Schema Roles)
     const permissions = {
       ADMIN: ['READ', 'EDIT', 'DELETE', 'SHARE', 'CHECKPOINT'],
       EDITOR: ['READ', 'EDIT', 'CHECKPOINT'],
@@ -45,22 +40,19 @@ export default class PermissionValidator {
       return {
         allowed: false,
         reason: 'INSUFFICIENT_PERMISSIONS',
-        message: `${access.mode} cannot perform ${action}`,
+        message: `${access.mode} mode mein ${action} allowed nahi hai.`,
         currentMode: access.mode,
       };
     }
 
-    // Step 3: Validate against Redis session
-    const sessionAccess = await this.redis.hget(
-      `file_session:${fileId}`,
-      userId
-    );
+    // 3. Redis Session Sync
+    // Taaki agar role change ho toh real-time reflection ho sake
+    const sessionKey = `file_session:${fileId}`;
+    const sessionData = await this.redis.hGet(sessionKey, userId);
 
-    if (sessionAccess) {
-      const { accessMode: cachedMode } = JSON.parse(sessionAccess);
-      
-      // DB and cache mismatch = Role changed mid-session
-      if (cachedMode !== access.mode) {
+    if (sessionData) {
+      const participant = JSON.parse(sessionData);
+      if (participant.accessMode !== access.mode) {
         await this.syncAccessMode(userId, fileId, access.mode);
       }
     }
@@ -71,66 +63,76 @@ export default class PermissionValidator {
     };
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // GET ACCESS MODE (DB Query)
-  // ═══════════════════════════════════════════════════════════
-
+  /**
+   * GET ACCESS MODE
+   * Checks Hierarchy: Project Owner > File Creator > Collaborator List
+   */
   async getAccessMode(userId, fileId) {
     const file = await this.prisma.fileMeta.findUnique({
       where: { id: fileId },
       include: {
-        collaboratorDetail: true,
         project: true,
+        collaboratorDetail: true,
       },
     });
 
     if (!file) return null;
 
-    // Check project owner
+    // A. Project Level Check (The Ultimate Boss)
     if (file.project.ownerId === userId) {
       return { mode: 'ADMIN', source: 'PROJECT_OWNER' };
     }
 
-    // Check file creator
+    // B. File Level Creator Check
     if (file.creatorId === userId) {
       return { mode: 'ADMIN', source: 'FILE_CREATOR' };
     }
 
-    // Check CollaboratorDetail
+    // C. CollaboratorDetail Table Check
     const collab = file.collaboratorDetail;
-    
-    if (collab.adminId === userId) {
-      return { mode: 'ADMIN', source: 'ADMIN_LIST' };
+    if (collab) {
+      if (collab.adminId === userId) {
+        return { mode: 'ADMIN', source: 'COLLAB_ADMIN' };
+      }
+      if (collab.editors.includes(userId)) {
+        return { mode: 'EDITOR', source: 'COLLAB_EDITOR' };
+      }
+      if (collab.viewers.includes(userId)) {
+        return { mode: 'VIEWER', source: 'COLLAB_VIEWER' };
+      }
     }
 
-    if (collab.editors.includes(userId)) {
-      return { mode: 'EDITOR', source: 'EDITOR_LIST' };
+    // D. Global Access Check (User.accessibleProjectIds)
+    // Agar project-level permission grant ki gayi hai
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { accessibleProjectIds: true }
+    });
+
+    if (user?.accessibleProjectIds.includes(file.projectId)) {
+      // Default to VIEWER if specifically not in file collab list
+      return { mode: 'VIEWER', source: 'PROJECT_ACCESS_LIST' };
     }
 
-    if (collab.viewers.includes(userId)) {
-      return { mode: 'VIEWER', source: 'VIEWER_LIST' };
-    }
-
-    return null; // No access
+    return null;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // SYNC ACCESS MODE (Update Redis cache)
-  // ═══════════════════════════════════════════════════════════
-
   async syncAccessMode(userId, fileId, newMode) {
-    const data = await this.redis.hget(`file_session:${fileId}`, userId);
+    const key = `file_session:${fileId}`;
+    const data = await this.redis.hGet(key, userId);
+    
     if (data) {
       const participant = JSON.parse(data);
       participant.accessMode = newMode;
-      participant.modeChangedAt = Date.now();
+      participant.modeChangedAt = new Date().toISOString();
 
-      await this.redis.hset(
-        `file_session:${fileId}`,
-        userId,
-        JSON.stringify(participant)
-      );
+      await this.redis.hSet(key, userId, JSON.stringify(participant));
+      
+      // Notify the specific user via socket about the change
+      this.io.to(`user:${userId}`).emit('PERMISSION_UPDATED', {
+        fileId,
+        newMode
+      });
     }
   }
 }
-

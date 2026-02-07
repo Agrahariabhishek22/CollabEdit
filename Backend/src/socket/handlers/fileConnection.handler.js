@@ -1,7 +1,13 @@
 // src/socket/handlers/fileConnection.handler.js
 
 class FileConnectionHandler {
-  constructor(io, sessionManager, permissionValidator, yjsDocManager, lspManager) {
+  constructor(
+    io,
+    sessionManager,
+    permissionValidator,
+    yjsDocManager,
+    lspManager,
+  ) {
     this.io = io;
     this.sessionManager = sessionManager;
     this.permissionValidator = permissionValidator;
@@ -16,59 +22,65 @@ class FileConnectionHandler {
     });
 
     // File leave (User closes file)
-    socket.on("file:leave", async (data) => {
-      await this.handleFileLeave(socket, data);
-    });
+    // socket.on("file:leave", async (data) => {
+    //   await this.handleFileLeave(socket, data);
+    // });
 
-    // Cursor update (Real-time cursor position)
-    socket.on("cursor:update", async (data) => {
-      await this.handleCursorUpdate(socket, data);
-    });
+    // // Cursor update (Real-time cursor position)
+    // socket.on("cursor:update", async (data) => {
+    //   await this.handleCursorUpdate(socket, data);
+    // });
   }
 
   async handleFileJoin(socket, { fileId, projectId }) {
     const { userId, userName, tabId } = socket;
 
     try {
-      // Validate access
+      // 1. Permission Check (Intact)
       const validation = await this.permissionValidator.validateAction(
         userId,
         fileId,
-        "READ"
+        "READ",
       );
-
       if (!validation.allowed) {
         return socket.emit("file:join-error", {
           fileId,
-          reason: validation.reason,
           message: validation.message,
         });
       }
 
-      // Join file session
+      // 2. Yjs Shadow Doc Rehydration (New! 🚀)
+      // Ye function file ko RAM mein layega aur Redis registry update karega
+      console.log(`[Yjs] Rehydrating doc for file ${fileId} (User: ${userName})`);
+      await this.yjsDocManager.getOrCreateDoc(fileId);
+
+      // Doc manager mein user ko add karo taaki cleanup scheduler ko pata rahe
+      await this.yjsDocManager.addUser(fileId, userId);
+
+      // 3. Get Initial Binary State (The "Handshake")
+      // User ko editor chalane ke liye current content ka binary chahiye
+      const initialState = await this.yjsDocManager.getStateVector(fileId);
+
+      // 4. Join Session & Rooms (Intact)
       const participant = await this.sessionManager.joinFileSession(
         fileId,
         userId,
         tabId,
-        validation.mode
+        validation.mode,
       );
-
-      // Join Socket.io room
       socket.join(`file:${fileId}`);
       socket.currentFileId = fileId;
 
-      // Get current participants
-      const participants = await this.sessionManager.getFileParticipants(fileId);
-
-      // Send confirmation
+      // 5. Send Confirmation + INITIAL CONTENT
       socket.emit("file:joined", {
         fileId,
         accessMode: validation.mode,
-        participants: Object.values(participants),
+        participants: await this.sessionManager.getFileParticipants(fileId),
+        initialState: Buffer.from(initialState), // 👈 Ye user ka editor "re-construct" karega
         timestamp: Date.now(),
       });
 
-      // Notify others
+      // 6. Notify Others (Intact)
       socket.to(`file:${fileId}`).emit("user:joined", {
         fileId,
         user: {
@@ -79,53 +91,51 @@ class FileConnectionHandler {
         },
       });
 
-      console.log(`[File] ${userName} joined ${fileId} as ${validation.mode}`);
-
+      console.log(`[File] ${userName} joined ${fileId} with Yjs rehydration`);
     } catch (err) {
-      console.error("[File Join] Error:", err);
-      socket.emit("file:join-error", {
-        fileId,
-        message: err.message,
-      });
+      console.error("[File Join Error]:", err);
+      socket.emit("file:join-error", { fileId, message: err.message });
     }
   }
 
-  async handleFileLeave(socket, { fileId }) {
-    const { userId, tabId } = socket;
+//   async handleFileLeave(socket, { fileId }) {
+//     const { userId, tabId } = socket;
 
-    try {
-      await this.sessionManager.leaveFileSession(fileId, userId, tabId);
-      socket.leave(`file:${fileId}`);
-      socket.currentFileId = null;
+//     try {
+//       await this.sessionManager.leaveFileSession(fileId, userId, tabId);
+//       socket.leave(`file:${fileId}`);
+//       socket.currentFileId = null;
 
-      socket.emit("file:left", { fileId });
+//       socket.emit("file:left", { fileId });
 
-      console.log(`[File] User ${userId} left ${fileId}`);
+//       console.log(`[File] User ${userId} left ${fileId}`);
+//     } catch (err) {
+//       console.error("[File Leave] Error:", err);
+//     }
+//   }
 
-    } catch (err) {
-      console.error("[File Leave] Error:", err);
-    }
-  }
+//   async handleCursorUpdate(socket, { fileId, cursor }) {
+//     const { userId } = socket;
 
-  async handleCursorUpdate(socket, { fileId, cursor }) {
-    const { userId } = socket;
-
-    try {
-      await this.sessionManager.updateCursorPosition(fileId, userId, cursor);
-    } catch (err) {
-      console.error("[Cursor Update] Error:", err);
-    }
-  }
+//     try {
+//       await this.sessionManager.updateCursorPosition(fileId, userId, cursor);
+//     } catch (err) {
+//       console.error("[Cursor Update] Error:", err);
+//     }
+//   }
 
   async handleDisconnect(socket) {
     const { userId, currentFileId, tabId } = socket;
-
+console.log(`[Disconnect] Cleaning up for user ${userId} (File: ${currentFileId})`);
     try {
       // Leave current file if any
       if (currentFileId) {
-        await this.sessionManager.leaveFileSession(currentFileId, userId, tabId);
+        await this.sessionManager.leaveFileSession(
+          currentFileId,
+          userId,
+          tabId,
+        );
       }
-
     } catch (err) {
       console.error("[Disconnect Cleanup] Error:", err);
     }

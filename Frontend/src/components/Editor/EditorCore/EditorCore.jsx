@@ -1,202 +1,180 @@
+// components/Editor/EditorCore/index.jsx
+import * as Y from "yjs";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import GutterPanel from "./GutterPanel";
-import EditorLayers from "./EditorLayers";
-import EditorScrollContainer from "./EditorScrollContainer";
-import { useSocket } from "../../../hooks/useSocket";
+import DisplayLayer from "./DisplayLayer";
+import InputLayer from "./InputLayer";
+import OverlayLayer from "./OverlayLayer";
+import { useEditor } from "../../../hooks/useEditor";
 
 export default function EditorCore({
   selectedFile,
-  editorContent,
-  setEditorContent,
+  accessMode,
+  initialBinary,
 }) {
+  const { ydoc, ytext, awarenessStates, updateCursor } = useEditor();
+
+  // ════════════════════════════════════════════════════════════
+  // STATE
+  // ════════════════════════════════════════════════════════════
   const [lines, setLines] = useState([]);
-  const [diagnostics, setDiagnostics] = useState([]);
-  const [conflicts, setConflicts] = useState([]);
-  const [scrollTop, setScrollTop] = useState(0);
   const [cursorPosition, setCursorPosition] = useState({ line: 0, column: 0 });
-  const [awarenessStates, setAwarenessStates] = useState([]);
-  const [selections, setSelections] = useState([]);
-  const [autocomplete, setAutocomplete] = useState({
-    isOpen: false,
-    suggestions: [],
-    selectedIndex: 0,
-    onSelect: null,
-    onClose: null,
-  });
-  const [hoverInfo, setHoverInfo] = useState({
-    isVisible: false,
-    data: null,
-    position: { line: 0, column: 0 },
-  });
-  
-  const editorRef = useRef(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0); // ← NEW
+
+  const scrollContainerRef = useRef(null);
   const inputLayerRef = useRef(null);
   const displayLayerRef = useRef(null);
-  const { socket } = useSocket();
-  const currentUserId = localStorage.getItem("userId") || "anonymous";
+  const gutterPanelRef = useRef(null);
+  const overlayLayerRef = useRef(null);
 
-  // Initialize content lines
+  // ════════════════════════════════════════════════════════════
+  // YJS OBSERVER: Update lines when ytext changes
+  // ════════════════════════════════════════════════════════════
   useEffect(() => {
-    if (editorContent) {
-      const contentLines = editorContent.split("\n");
+    if (initialBinary && ydoc) {
+      try {
+        const uint8 = new Uint8Array(initialBinary);
+        Y.applyUpdate(ydoc, uint8);
+        console.log("✅ [EditorCore] Binary applied to Y.Doc");
+      } catch (err) {
+        console.error("❌ [EditorCore] Hydration failed:", err);
+      }
+    }
+  }, [initialBinary, ydoc]);
+
+  // ════════════════════════════════════════════════════════════
+  // OBSERVER: Split into lines for Gutter & Display
+  // ════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const observer = () => {
+      const content = ytext.toString();
+      const contentLines = content.split("\n");
       setLines(contentLines);
-    }
-  }, [editorContent]);
+    };
 
-  // Handle scroll sync
+    ytext.observe(observer);
+    observer(); // Initial check
+
+    return () => ytext.unobserve(observer);
+  }, [ytext]);
+
+  // ════════════════════════════════════════════════════════════
+  // SCROLL SYNC: Use requestAnimationFrame for smooth, sync'd scroll
+  // ════════════════════════════════════════════════════════════
   const handleScroll = useCallback((e) => {
-    const scrollTop = e.target.scrollTop;
-    setScrollTop(scrollTop);
+    const { scrollTop: newScrollTop, scrollLeft: newScrollLeft } = e.target;
 
-    // Sync display and input layers
-    if (displayLayerRef.current) {
-      displayLayerRef.current.scrollTop = scrollTop;
-    }
-    if (inputLayerRef.current) {
-      inputLayerRef.current.scrollTop = scrollTop;
-    }
+    // React state update (Optional: for components that need it)
+    setScrollTop(newScrollTop);
+    setScrollLeft(newScrollLeft);
+
+    // 1. Vertical Sync: Sabko upar khiskao (including Gutter)
+    const verticalLayers = [
+      displayLayerRef,
+      inputLayerRef,
+      gutterPanelRef,
+      overlayLayerRef,
+    ];
+    verticalLayers.forEach((ref) => {
+      if (ref.current) {
+        // Humne transform ko modify kiya taaki vertical aur horizontal dono handle ho sakein
+        // Lekin Gutter horizontal scroll nahi hona chahiye!
+        if (ref === gutterPanelRef) {
+          ref.current.style.transform = `translateY(-${newScrollTop}px)`;
+        } else {
+          // Baaki layers vertical aur horizontal dono move hongi
+          ref.current.style.transform = `translateY(-${newScrollTop}px) translateX(-${newScrollLeft}px)`;
+        }
+      }
+    });
+    // console.log(`[Editor Core] scrolltop:${newScrollTop} and srcollleft:${newScrollLeft}`);
+    
   }, []);
 
-  // Handle input from InputLayer
+  // ════════════════════════════════════════════════════════════
+  // INPUT HANDLER: When user types
+  // ════════════════════════════════════════════════════════════
   const handleInputChange = useCallback(
     (newContent) => {
-      setEditorContent(newContent);
-      const contentLines = newContent.split("\n");
-      setLines(contentLines);
+      const currentContent = ytext.toString();
 
-      // Emit to socket for real-time sync (Yjs will handle this)
-      socket?.emit("editor:content-change", {
-        fileId: selectedFile?.id,
-        projectId: selectedFile?.projectId,
-        content: newContent,
-      });
+      if (newContent === currentContent) return;
+
+      // Replace entire content
+      ytext.delete(0, currentContent.length);
+      ytext.insert(0, newContent);
+
+      console.log("[EditorCore] Content updated via Yjs");
     },
-    [setEditorContent, socket, selectedFile]
+    [ytext],
   );
 
-  // Handle cursor position tracking
+  // ════════════════════════════════════════════════════════════
+  // CURSOR HANDLER: Track cursor position
+  // ════════════════════════════════════════════════════════════
   const handleCursorChange = useCallback(
     (line, column) => {
       setCursorPosition({ line, column });
-
-      // Emit awareness update (for collaborative cursors)
-      socket?.emit("editor:cursor-update", {
-        fileId: selectedFile?.id,
-        projectId: selectedFile?.projectId,
-        line,
-        column,
-      });
+      updateCursor(line, column);
     },
-    [socket, selectedFile]
+    [updateCursor],
   );
 
-  // Listen for LSP diagnostics
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleDiagnostics = (data) => {
-      setDiagnostics(data.diagnostics || []);
-    };
-
-    const handleConflicts = (data) => {
-      setConflicts(data.conflicts || []);
-    };
-
-    const handleAwarenessChange = (data) => {
-      setAwarenessStates(data.states || []);
-    };
-
-    const handleSelections = (data) => {
-      setSelections(data.selections || []);
-    };
-
-    const handleHoverInfo = (data) => {
-      setHoverInfo({
-        isVisible: true,
-        data: data.info,
-        position: data.position,
-      });
-
-      // Auto-hide after 5 seconds
-      setTimeout(() => {
-        setHoverInfo((prev) => ({ ...prev, isVisible: false }));
-      }, 5000);
-    };
-
-    socket.on("lsp:diagnostics", handleDiagnostics);
-    socket.on("conflict:detected", handleConflicts);
-    socket.on("awareness:change", handleAwarenessChange);
-    socket.on("editor:selections", handleSelections);
-    socket.on("lsp:hover-info", handleHoverInfo);
-
-    return () => {
-      socket.off("lsp:diagnostics", handleDiagnostics);
-      socket.off("conflict:detected", handleConflicts);
-      socket.off("awareness:change", handleAwarenessChange);
-      socket.off("editor:selections", handleSelections);
-      socket.off("lsp:hover-info", handleHoverInfo);
-    };
-  }, [socket]);
-
-  // Autocomplete handlers
-  const handleAutocompleteSelect = useCallback(
-    (suggestion) => {
-      // Insert suggestion into text at cursor position
-      const offset =
-        lines
-          .slice(0, cursorPosition.line)
-          .reduce((sum, line) => sum + line.length + 1, 0) + cursorPosition.column;
-
-      const newContent =
-        editorContent.slice(0, offset) +
-        suggestion.label +
-        editorContent.slice(offset);
-
-      setEditorContent(newContent);
-      setAutocomplete((prev) => ({ ...prev, isOpen: false }));
-    },
-    [editorContent, cursorPosition, lines, setEditorContent]
-  );
-
-  const closeAutocomplete = useCallback(() => {
-    setAutocomplete((prev) => ({ ...prev, isOpen: false }));
-  }, []);
+  // ════════════════════════════════════════════════════════════
+  // READ-ONLY MODE: If user is VIEWER
+  // ════════════════════════════════════════════════════════════
+  const isReadOnly = accessMode === "VIEWER";
 
   return (
-    <div ref={editorRef} className="flex-1 flex bg-slate-950 overflow-hidden">
-      {/* Gutter Panel (Line Numbers + Error Icons) */}
-      <GutterPanel
-        lines={lines}
-        diagnostics={diagnostics}
-        scrollTop={scrollTop}
-      />
+    <div className="flex-1 flex bg-slate-950 overflow-hidden">
+      {/* GUTTER PANEL (Line Numbers) - FIXED OUTSIDE SCROLL */}
 
-      {/* Editor Scroll Container */}
-      <EditorScrollContainer scrollTop={scrollTop} onScroll={handleScroll}>
-        {/* Editor Layers (Display + Input + Overlay + Widget) */}
-        <EditorLayers
-          lines={lines}
-          editorContent={editorContent}
-          diagnostics={diagnostics}
-          conflicts={conflicts}
-          awarenessStates={awarenessStates}
-          selections={selections}
-          cursorPosition={cursorPosition}
-          scrollTop={scrollTop}
-          displayLayerRef={displayLayerRef}
-          inputLayerRef={inputLayerRef}
-          onInputChange={handleInputChange}
-          onCursorChange={handleCursorChange}
-          selectedFile={selectedFile}
-          currentUserId={currentUserId}
-          autocomplete={{
-            ...autocomplete,
-            onSelect: handleAutocompleteSelect,
-            onClose: closeAutocomplete,
-          }}
-          hoverInfo={hoverInfo}
-        />
-      </EditorScrollContainer>
+      {/* 1. MASTER SCROLL CONTAINER: Sirf ye scroll hoga */}
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 relative overflow-auto flex flex-row "
+        onScroll={handleScroll}
+        style={{ height: "100%" }}
+      >
+        {/* 2. GUTTER AREA: Left side fixed width */}
+        <div className="w-12 sticky left-0 z-30 bg-slate-900 border-r border-slate-800">
+          <GutterPanel ref={gutterPanelRef} lines={lines} />
+        </div>
+
+        {/* 3. EDITOR CONTENT AREA: Right side bacha hua space */}
+        <div className="flex-1 relative">
+          <DisplayLayer
+            ref={displayLayerRef}
+            lines={lines}
+            selectedFile={selectedFile}
+            scrollLeft={scrollLeft}
+          />
+          <InputLayer
+            ref={inputLayerRef}
+            content={ytext.toString()}
+            onChange={handleInputChange}
+            onCursorChange={handleCursorChange}
+            isReadOnly={isReadOnly}
+            scrollLeft={scrollLeft}
+          />
+          {/* <OverlayLayer
+            ref={overlayLayerRef}
+            awarenessStates={awarenessStates}
+            cursorPosition={cursorPosition}
+                        scrollLeft={scrollLeft}
+
+          /> */}
+          {/* 4. GHOST DIV: Browser ko scrollbar dene ke liye majboor karega */}
+          <div
+            style={{
+              height: `${lines.length * 24}px`,
+              width: "100%", // ← CHANGE: "2000px" se "100%" kar de
+            }}
+          />
+          {" "}
+        </div>
+      </div>
     </div>
   );
 }

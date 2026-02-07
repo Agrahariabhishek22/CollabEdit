@@ -1,57 +1,81 @@
-import React, { useRef, useEffect, useMemo } from "react";
+// components/Editor/EditorCore/DisplayLayer.jsx
+
+import React, { forwardRef, useMemo } from "react";
 import { highlightCode } from "../../../utils/syntaxHighlighter";
 
-const LINE_HEIGHT = 20; // pixels
-const TAB_SIZE = 4; // spaces
-
-export default function DisplayLayer({
-  lines,
-  fileLanguage,
-  displayLayerRef,
-}) {
-  const htmlContentRef = useRef(null);
-
-  // Generate syntax-highlighted HTML (placeholder - will integrate Tree-sitter)
+const DisplayLayer = forwardRef(({ lines, selectedFile, scrollTop, scrollLeft }, ref) => {
   const highlightedLines = useMemo(() => {
-    return lines.map((line, index) => {
-      // TODO: Replace with actual Tree-sitter highlighting
-      // For now, simple placeholder with HTML escaping
-      const escapedLine = line
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-
-      return {
-        lineNum: index + 1,
-        content: escapedLine,
-        html: `<span class="text-slate-300">${escapedLine}</span>`,
-      };
-    });
-  }, [lines]);
+    const language = detectLanguage(selectedFile?.name);
+    const fullContent = lines.join("\n");
+    const fullHtml = highlightCode(fullContent, language);
+    return fullHtml.split("\n");
+  }, [lines, selectedFile]);
 
   return (
     <div
-      ref={displayLayerRef}
-      className="absolute inset-0 overflow-hidden text-slate-200 font-mono text-sm bg-slate-950 z-10 pointer-events-none"
+      ref={ref}
+      className="absolute inset-0 pointer-events-none select-none overflow-hidden"
       style={{
-        lineHeight: `${LINE_HEIGHT}px`,
+        fontFamily: "'Fira Code', monospace",
+        fontSize: "14px",
+        zIndex: 0,
+        lineHeight: "24px",
+        padding: "10px",
+        boxSizing: "border-box",
+        height: `${lines.length * 24 + 20}px`,
+        transform: `translateY(-${scrollTop || 0}px) translateX(-${scrollLeft || 0}px)`, // ← BOTH TRANSFORMS
+        willChange: "transform",
+        transition: "none",
+        backgroundColor: "transparent",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        WebkitFontSmoothing: "antialiased",
+        textRendering: "optimizeLegibility",
+        overflow: "hidden",
+        width: "4000px"
       }}
     >
-      <div className="px-4 py-2">
-        {highlightedLines.map((lineData) => (
-          <div
-            key={lineData.lineNum}
-            className="whitespace-pre-wrap break-words"
-            style={{
-              height: LINE_HEIGHT,
-              minHeight: LINE_HEIGHT,
-            }}
-            dangerouslySetInnerHTML={{ __html: lineData.html }}
-          />
-        ))}
-      </div>
+      {highlightedLines.map((htmlLine, idx) => (
+        <div
+          key={idx}
+          style={{
+            whiteSpace: "pre",
+            height: "24px",
+            width:"max-content",
+            lineHeight: "24px",
+            flexShrink: 0,
+            overflow: "hidden",
+            margin: 0,
+            padding: 0,
+          }}
+          dangerouslySetInnerHTML={{
+            __html: htmlLine || "&nbsp;",
+          }}
+        />
+      ))}
     </div>
   );
+});
+
+DisplayLayer.displayName = "DisplayLayer";
+
+function detectLanguage(filename) {
+  if (!filename) return "javascript";
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const langMap = {
+    js: "javascript",
+    jsx: "javascript",
+    ts: "typescript",
+    tsx: "typescript",
+    py: "python",
+    java: "java",
+    cpp: "cpp",
+    c: "cpp",
+    go: "go",
+  };
+  return langMap[ext] || "javascript";
 }
+
+export default DisplayLayer;

@@ -4,6 +4,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+import 'prismjs/themes/prism-tomorrow.css';
 import Signup from "./pages/SignUp";
 import Login from "./pages/login";
 import DashboardLayout from "./pages/DashboardLayout";

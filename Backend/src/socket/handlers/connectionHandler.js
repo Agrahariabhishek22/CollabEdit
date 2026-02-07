@@ -73,10 +73,10 @@ export const handleConnection = async (socket) => {
       await sessionManager.createUserSession(userId, socket.id, {
         userName,
         userEmail,
-        tabId,
+        // tabId,
       });
 
-      await sessionManager.registerTab(userId, tabId, socket.id);
+      // await sessionManager.registerTab(userId, tabId, socket.id);
     }
   } catch (error) {
     console.error("[Connection] Session creation error:", error);
@@ -98,15 +98,15 @@ export const handleDisconnection = async (socket) => {
       await sessionManager.removeTab(tabId);
 
       // Check if user has other tabs open
-      const activeTabs = await sessionManager.getActiveTabs(userId);
+      // const activeTabs = await sessionManager.getActiveTabs(userId);
 
-      if (activeTabs.length === 0) {
+      // if (activeTabs.length === 0) {
         // No more tabs, destroy user session
-        await sessionManager.destroyUserSession(userId);
-        console.log(`  → All tabs closed for user ${userId}`);
-      } else {
-        console.log(`  → User ${userId} still has ${activeTabs.length} tabs open`);
-      }
+        // await sessionManager.destroyUserSession(userId);
+        // console.log(`  → All tabs closed for user ${userId}`);
+      // } else {
+        // console.log(`  → User ${userId} still has ${activeTabs.length} tabs open`);
+      // }
     }
   } catch (error) {
     console.error("[Disconnect] Cleanup error:", error);

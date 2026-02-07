@@ -1,11 +1,11 @@
 import React, { useState, useCallback } from "react";
-import {
-  CheckpointDropdown,
-  ActivityLogButton,
-  SaveButton,
-  LiveCollaborators,
-  ChatToggleButton,
-} from "./index";
+// import {
+//   CheckpointDropdown,
+//   ActivityLogButton,
+//   SaveButton,
+//   LiveCollaborators,
+//   ChatToggleButton,
+// } from "./index";
 
 export default function EditorHeader({
   selectedFile,
@@ -17,12 +17,12 @@ export default function EditorHeader({
     <div className="h-16 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between gap-4">
       {/* Left Section: Checkpoint & Activity */}
       <div className="flex items-center gap-3">
-        {selectedFile?.id && (
-          <>
+        {/* {selectedFile?.id && ( 
+           <>
             <CheckpointDropdown selectedFile={selectedFile} />
             <ActivityLogButton selectedFile={selectedFile} />
           </>
-        )}
+        )} */}
       </div>
 
       {/* Middle Section: File Info */}
@@ -41,7 +41,7 @@ export default function EditorHeader({
 
       {/* Right Section: Save, Collaborators, Chat */}
       <div className="flex items-center gap-3">
-        {selectedFile?.id && (
+        {/* {selectedFile?.id && (
           <>
             <SaveButton
               selectedFile={selectedFile}
@@ -55,7 +55,7 @@ export default function EditorHeader({
 
             <ChatToggleButton isOpen={isChatOpen} onToggle={onChatToggle} />
           </>
-        )}
+        )} */}
       </div>
     </div>
   );

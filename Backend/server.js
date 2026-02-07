@@ -253,6 +253,16 @@ const initializeSocketIO = async () => {
 
     // Initialize Socket.io (using your existing config)
     io = initSocketIO(server);
+    // 🔥 FIX: Services mein io inject karo kyunki wo pehle null the
+    if (sessionManager) {
+      sessionManager.setIo(io);
+      console.log("✓ SessionManager synced with Socket.io");
+    }
+     
+    if (permissionValidator) {
+      permissionValidator.setIo(io);
+      console.log("✓ PermissionValidator synced with Socket.io");
+    }
 
     // Make io globally available
     global.io = io;
@@ -324,8 +334,7 @@ const initializeSocketIO = async () => {
       socket.on("error", (error) => handleError(socket, error));
 
       // ════════════════════════════════════════════════════
-      // NEW HANDLERS (Editor collaboration features)
-      // 
+      // NEW HANDLERS (Editor collaboration features) 
       // These register multiple events:
       // - file:join, file:leave, cursor:update (fileConnectionHandler)
       // - yjs:request-state, yjs:update, yjs:awareness (yjsHandler)
@@ -450,7 +459,7 @@ const startServer = async () => {
     await connectRedis();
 
     // Step 3: Initialize services (new - for editor collaboration)
-    // await initializeServices();
+    await initializeServices();
 
     // Step 4: Initialize Socket.io (enhanced with new handlers)
     await initializeSocketIO();

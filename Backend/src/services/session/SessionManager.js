@@ -17,7 +17,10 @@ export default class SessionManager {
     this.redis = redisClient;
     this.io = io;
   }
-
+setIo(io) {
+    this.io = io;
+    console.log("[SessionManager] Socket.io instance injected successfully.");
+  }
   // ═══════════════════════════════════════════════════════════
   // USER SESSION (Login/Logout)
   // ═══════════════════════════════════════════════════════════

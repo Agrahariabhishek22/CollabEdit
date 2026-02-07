@@ -1,7 +1,8 @@
 // services/yjs/YjsDocManager.js
 
 import * as Y from 'yjs';
-import { Buffer } from 'buffer'; // Node.js environments mein
+import { Buffer } from 'buffer'; 
+
 class YjsDocManager {
   constructor(redis, persistence) {
     this.redis = redis;
@@ -28,8 +29,11 @@ class YjsDocManager {
     const ydoc = new Y.Doc();
     const ytext = ydoc.getText('content');
 
-    // Try to load from Redis (fastest)
-    let binary = await this.redis.getBuffer(`doc:binary:${fileId}`);
+    // ✅ FIX: commandOptions ki jagah sendCommand use kiya hai Buffer pane ke liye
+    let binary = await this.redis.sendCommand(
+      ['GET', `doc:binary:${fileId}`],
+      { returnBuffers: true } // Ye ensure karta hai ki binary data corrupt na ho
+    );
 
     if (!binary) {
       // Try to load from Disk (.yjs file)
@@ -102,7 +106,8 @@ class YjsDocManager {
 
     const binary = Y.encodeStateAsUpdate(doc.ydoc);
     
-    await this.redis.setex(
+    // ✅ node-redis v4 mein setEx syntax (Capital E)
+    await this.redis.setEx(
       `doc:binary:${fileId}`,
       600, // 10 min TTL
       Buffer.from(binary)
@@ -173,4 +178,4 @@ class YjsDocManager {
   }
 }
 
-export default YjsDocManager; 
+export default YjsDocManager;
