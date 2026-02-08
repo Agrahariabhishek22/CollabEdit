@@ -10,7 +10,6 @@ import { useEditor } from "../../../hooks/useEditor";
 export default function EditorCore({
   selectedFile,
   accessMode,
-  initialBinary,
 }) {
   const { ydoc, ytext, awarenessStates, updateCursor, isReady } = useEditor();
 
@@ -196,13 +195,12 @@ const handleInputChange = useCallback(
             isReadOnly={isReadOnly}
             scrollLeft={scrollLeft}
           />
-          {/* <OverlayLayer
-            ref={overlayLayerRef}
+          <OverlayLayer
+            scrollTop={scrollTop}
+            scrollLeft={scrollLeft}
             awarenessStates={awarenessStates}
-            cursorPosition={cursorPosition}
-                        scrollLeft={scrollLeft}
-
-          /> */}
+            // currentUserId={currentUserId}
+          />
           {/* 4. GHOST DIV: Browser ko scrollbar dene ke liye majboor karega */}
           <div
             style={{

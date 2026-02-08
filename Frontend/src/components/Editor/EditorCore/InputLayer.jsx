@@ -114,6 +114,8 @@ const InputLayer = forwardRef(
       const lines = textBeforeCursor.split("\n");
       const line = lines.length - 1;
       const column = lines[lines.length - 1].length;
+      console.log("[Input layer update cursor position",line,column);
+      
       onCursorChange(line, column);
     };
 

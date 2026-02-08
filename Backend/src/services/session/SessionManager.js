@@ -17,14 +17,14 @@ export default class SessionManager {
     this.redis = redisClient;
     this.io = io;
   }
-setIo(io) {
+  setIo(io) {
     this.io = io;
     console.log("[SessionManager] Socket.io instance injected successfully.");
   }
   // ═══════════════════════════════════════════════════════════
   // USER SESSION (Login/Logout)
   // ═══════════════════════════════════════════════════════════
-  
+
   async createUserSession(userId, socketId, metadata) {
     const sessionData = {
       userId,
@@ -36,11 +36,11 @@ setIo(io) {
     // Store in Redis with 24h TTL
     // Node-Redis v4 use .set(key, value, { EX: seconds })
     await this.redis.set(`session:${userId}`, JSON.stringify(sessionData), {
-      EX: 86400 // 24 hours in seconds
+      EX: 86400, // 24 hours in seconds
     });
 
     // Track socket → user mapping
-    await this.redis.hSet('socket_to_user', socketId, userId);
+    await this.redis.hSet("socket_to_user", socketId, userId);
   }
 
   async getUserSession(userId) {
@@ -51,7 +51,7 @@ setIo(io) {
   async destroyUserSession(userId) {
     const session = await this.getUserSession(userId);
     if (session) {
-      await this.redis.hDel('socket_to_user', session.socketId);
+      await this.redis.hDel("socket_to_user", session.socketId);
     }
     await this.redis.del(`session:${userId}`);
   }
@@ -70,7 +70,7 @@ setIo(io) {
 
     // setex is deprecated in v4, use set with EX option
     await this.redis.set(`tab:${tabId}`, JSON.stringify(tabData), {
-      EX: 3600 // 1 hour TTL
+      EX: 3600, // 1 hour TTL
     });
 
     // Add to user's tab set
@@ -116,7 +116,7 @@ setIo(io) {
     await this.redis.hSet(
       `file_session:${fileId}`,
       userId,
-      JSON.stringify(participant)
+      JSON.stringify(participant),
     );
 
     // Track user's current file
@@ -125,11 +125,11 @@ setIo(io) {
     // Join Socket.io room
     const socketId = await this.getSocketId(userId);
     const socket = this.io.sockets.sockets.get(socketId);
-    
+
     if (socket) socket.join(`file:${fileId}`);
 
     // Broadcast to others
-    this.io.to(`file:${fileId}`).emit('user:joined', {
+    this.io.to(`file:${fileId}`).emit("user:joined", {
       fileId,
       user: participant,
     });
@@ -147,11 +147,11 @@ setIo(io) {
     // Leave Socket.io room
     const socketId = await this.getSocketId(userId);
     const socket = this.io.sockets.sockets.get(socketId);
-    
+
     if (socket) socket.leave(`file:${fileId}`);
 
     // Broadcast to others
-    this.io.to(`file:${fileId}`).emit('user:left', {
+    this.io.to(`file:${fileId}`).emit("user:left", {
       fileId,
       userId,
     });
@@ -169,7 +169,7 @@ setIo(io) {
     return participants;
   }
 
-  async updateCursorPosition(fileId, userId, cursor) {
+  async updateCursorPosition(fileId, userId,userName,userEmail, cursor) {
     const data = await this.redis.hGet(`file_session:${fileId}`, userId);
     if (data) {
       const participant = JSON.parse(data);
@@ -179,12 +179,14 @@ setIo(io) {
       await this.redis.hSet(
         `file_session:${fileId}`,
         userId,
-        JSON.stringify(participant)
+        JSON.stringify(participant),
       );
+console.log("[Session Manager update cursor pos] Updated File_sessionnow emiting",cursor);
 
       // Broadcast to others (throttled at socket level)
-      this.io.to(`file:${fileId}`).emit('cursor:update', {
+      this.io.to(`file:${fileId}`).emit("cursor:update", {
         userId,
+        userName,userEmail,
         cursor,
       });
     }
@@ -200,6 +202,6 @@ setIo(io) {
   }
 
   async getUserIdFromSocket(socketId) {
-    return await this.redis.hGet('socket_to_user', socketId);
+    return await this.redis.hGet("socket_to_user", socketId);
   }
 }

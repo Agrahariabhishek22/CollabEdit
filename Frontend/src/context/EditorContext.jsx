@@ -93,9 +93,9 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
 
       // 🟢 FIX: Socket.io backend se binary (Buffer/ArrayBuffer) bhej raha hai
       // Use Uint8Array mein lapeto taaki Yjs samajh sake
-      
+
       const binaryUpdate = new Uint8Array(update);
-      console.log("[handle remote update] inside editor context",update);
+      console.log("[handle remote update] inside editor context", update);
 
       // Apply with "remote" origin to prevent echo
       try {
@@ -115,14 +115,50 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
   // ════════════════════════════════════════════════════════════
   // 4. AWARENESS: Collaborative cursors
   // ════════════════════════════════════════════════════════════
+  const CURSOR_COLORS = [
+    "#FF5733",
+    "#33FF57",
+    "#3357FF",
+    "#F333FF",
+    "#FFB833",
+    "#33FFF3",
+    "#FF3380",
+    "#8C33FF",
+  ];
+  // Helper: UserId se consistently ek hi color nikalne ke liye
+  const getColorForUser = (userId) => {
+    // Simple hash logic: userId ke characters ka sum le lo
+    let hash = 0;
+    if (!userId) return CURSOR_COLORS[0];
+    for (let i = 0; i < userId.length; i++) {
+      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % CURSOR_COLORS.length;
+    return CURSOR_COLORS[index];
+  };
   useEffect(() => {
     if (!socket) return;
 
-    // Listen for cursor updates from other users
-    const handleCursorUpdate = ({ userId, userName, cursor, color }) => {
+    const handleCursorUpdate = ({ userId, userName, cursor }) => {
+      // 1. Agar data valid nahi hai toh skip karo
+      if (!userId || !cursor) return;
+
+      const userColor = getColorForUser(userId);
+
       setAwarenessStates((prev) => {
-        const filtered = prev.filter((state) => state.userId !== userId);
-        return [...filtered, { userId, userName, cursor, color }];
+        // 2. Purani state mein se is specific user ko dhoondo aur hatao (Filter)
+        const otherUsers = prev.filter((u) => u.userId !== userId);
+
+        // 3. Naya data add kar do
+        return [
+          ...otherUsers,
+          {
+            userId,
+            userName: userName || "Anonymous",
+            cursor,
+            color: userColor,
+          },
+        ];
       });
     };
 
@@ -133,10 +169,17 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
     };
   }, [socket]);
 
+  // 4. Debugging ke liye alag useEffect (taaki hamesha latest state dikhe)
+  useEffect(() => {
+    if (awarenessStates.length > 0) {
+      console.log("[Awareness] Current Collabs:", awarenessStates);
+    }
+  }, [awarenessStates]);
+
   // Send local cursor updates
   const updateCursor = (line, column) => {
     if (!socket) return;
-
+    console.log("[EditorContext] Sending cursor update:", line, column);
     socket.emit("cursor:update", {
       fileId,
       cursor: { line, column },

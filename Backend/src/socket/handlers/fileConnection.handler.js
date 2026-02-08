@@ -27,9 +27,9 @@ class FileConnectionHandler {
     // });
 
     // // Cursor update (Real-time cursor position)
-    // socket.on("cursor:update", async (data) => {
-    //   await this.handleCursorUpdate(socket, data);
-    // });
+    socket.on("cursor:update", async (data) => {
+      await this.handleCursorUpdate(socket, data);
+    });
   }
 
   async handleFileJoin(socket, { fileId, projectId }) {
@@ -112,17 +112,18 @@ class FileConnectionHandler {
 //     } catch (err) {
 //       console.error("[File Leave] Error:", err);
 //     }
-//   }
+//   } 
 
-//   async handleCursorUpdate(socket, { fileId, cursor }) {
-//     const { userId } = socket;
-
-//     try {
-//       await this.sessionManager.updateCursorPosition(fileId, userId, cursor);
-//     } catch (err) {
-//       console.error("[Cursor Update] Error:", err);
-//     }
-//   }
+  async handleCursorUpdate(socket, { fileId, cursor }) {
+    const { userId,userName,userEmail } = socket;
+    console.log("[Cursor Update] Recieved cursor update from user",userName,cursor);
+    
+    try {
+      await this.sessionManager.updateCursorPosition(fileId, userId,userName,userEmail, cursor);
+    } catch (err) {
+      console.error("[Cursor Update] Error:", err);
+    }
+  } 
 
   async handleDisconnect(socket) {
     const { userId, currentFileId, tabId } = socket;

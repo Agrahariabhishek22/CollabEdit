@@ -11,7 +11,7 @@ import cookie from "cookie";
 export const socketAuth = async (socket, next) => {
   try {
     console.log("I am inside socket auth to authenticate myself");
-    
+
     const cookies = cookie.parse(socket.handshake.headers.cookie || "");
     const token = cookies.token;
 
@@ -23,8 +23,8 @@ export const socketAuth = async (socket, next) => {
     const decoded = jwt.verify(token, config.JWT_SECRET);
     socket.userId = decoded.id;
     socket.userEmail = decoded.email;
-    socket.userName = decoded.name ;
-console.log(decoded);
+    socket.userName = decoded.name;
+    console.log(decoded);
 
     // Verify session exists in Redis
     const session = await getSession(decoded.id);
@@ -33,11 +33,13 @@ console.log(decoded);
     }
 
     socket.userData = decoded;
-    
+
     // Generate tab ID (for multi-tab support)
-    socket.tabId = socket.handshake.query.tabId || `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    socket.tabId =
+      socket.handshake.query.tabId ||
+      `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     // console.log(socket);
-    
+
     next();
   } catch (error) {
     next(new Error(`Authentication failed: ${error.message}`));
@@ -50,7 +52,9 @@ console.log(decoded);
 export const handleConnection = async (socket) => {
   const { userId, userName, userEmail, tabId } = socket;
 
-  console.log(`✓ User connected: ${userName} (${userId}) - Socket: ${socket.id} - Tab: ${tabId}`);
+  console.log(
+    `✓ User connected: ${userName} (${userId}) - Socket: ${socket.id} - Tab: ${tabId}`,
+  );
 
   // Emit welcome message
   socket.emit("connection-established", {
@@ -89,7 +93,9 @@ export const handleConnection = async (socket) => {
 export const handleDisconnection = async (socket) => {
   const { userId, userName, tabId } = socket;
 
-  console.log(`✗ User disconnected: ${userName} (${userId}) - Socket: ${socket.id}`);
+  console.log(
+    `✗ User disconnected: ${userName} (${userId}) - Socket: ${socket.id}`,
+  );
 
   try {
     const sessionManager = global.sessionManager;
@@ -101,11 +107,11 @@ export const handleDisconnection = async (socket) => {
       // const activeTabs = await sessionManager.getActiveTabs(userId);
 
       // if (activeTabs.length === 0) {
-        // No more tabs, destroy user session
-        // await sessionManager.destroyUserSession(userId);
-        // console.log(`  → All tabs closed for user ${userId}`);
+      // No more tabs, destroy user session
+      // await sessionManager.destroyUserSession(userId);
+      // console.log(`  → All tabs closed for user ${userId}`);
       // } else {
-        // console.log(`  → User ${userId} still has ${activeTabs.length} tabs open`);
+      // console.log(`  → User ${userId} still has ${activeTabs.length} tabs open`);
       // }
     }
   } catch (error) {

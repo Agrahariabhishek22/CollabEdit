@@ -4,83 +4,53 @@ import ErrorSquiggles from "./ErrorSquiggles";
 import ConflictMarkers from "./ConflictMarkers";
 import SelectionHighlights from "./SelectionHighlights";
 
-const LINE_HEIGHT = 20;
+// DisplayLayer se sync karne ke liye constants
+const LINE_HEIGHT = 24; 
+const CHAR_WIDTH = 8.43; // Fira Code 14px ke liye accurate width
+const PADDING_OFFSET = 10; // Jo padding tune DisplayLayer mein di hai
 
 /**
  * OverlayLayer (Layer 3: z-index 30)
- *
- * Renders all overlay elements on top of DisplayLayer and InputLayer:
- * - Collaborative cursors from other users (Awareness)
- * - Error squiggles from LSP diagnostics
- * - Conflict markers for merge conflicts
- * - Selection highlights from other users
  */
 export default function OverlayLayer({
   awarenessStates,
-  // diagnostics,
-  // conflicts,
-  // awarenessStates,
-  // selections,
-  // currentUserId,
   scrollTop,
   scrollLeft,
+  // currentUserId, // Taaki apna cursor yahan render na ho (kyunki wo textarea handle karta hai)
 }) {
-  const lineHeight = 20;
-  const charWidth = 8.4; // Monospace character width
   
   return (
-    // <div
-    //   className="absolute inset-0 overflow-hidden z-30 pointer-events-none"
-    //   style={{
-    //     lineHeight: `${LINE_HEIGHT}px`,
-    //   }}
-    // >
-    //   {/* Selection Highlights - lowest layer */}
-    //   <SelectionHighlights
-    //     selections={selections}
-    //     scrollTop={scrollTop}
-    //   />
-
-    //   {/* Error Squiggles */}
-    //   <ErrorSquiggles
-    //     diagnostics={diagnostics}
-    //     scrollTop={scrollTop}
-    //   />
-
-    //   {/* Conflict Markers */}
-    //   <ConflictMarkers
-    //     conflicts={conflicts}
-    //     scrollTop={scrollTop}
-    //   />
-
-    //   {/* Collaborative Cursors - top layer */}
-    //   <CollaborativeCursors
-    //     awarenessStates={awarenessStates}
-    //     currentUserId={currentUserId}
-    //     scrollTop={scrollTop}
-    //   />
-    // </div>
- <div
-      className="absolute top-0 left-0 w-full h-full pointer-events-none"
+    <div
+      className="absolute top-0 left-0 pointer-events-none overflow-hidden"
       style={{ 
-        zIndex: 3,
-        transform: `translateY(-${scrollTop || 0}px) translateX(-${scrollLeft || 0}px)`, // ← BOTH TRANSFORMS
+        zIndex: 30, // Textarea (2) ke upar aur DisplayLayer (0) ke upar
+        fontFamily: "'Fira Code', monospace",
+        fontSize: "14px",
+        transform: `translateY(-${scrollTop || 0}px) translateX(-${scrollLeft || 0}px)`,
         willChange: "transform",
         transition: "none",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "4000px" // DisplayLayer ki width se match
       }}
     >
       {awarenessStates && awarenessStates.map((state) => {
         const { userId, userName, cursor, color = "#FF6B6B" } = state;
 
-        if (!cursor) return null;
+        // 1. Agar cursor data nahi hai ya ye Current User ka cursor hai toh render mat karo
+        // if (!cursor || userId === currentUserId) return null;
 
-        const x = cursor.column * CHAR_WIDTH + 10;
-        const y = cursor.line * LINE_HEIGHT + 10;
+        // 2. Exact Position Calculation
+        // Padding (10px) add karna zaroori hai kyunki DisplayLayer mein padding: 10px hai
+        const x = cursor.column * CHAR_WIDTH + PADDING_OFFSET;
+        const y = cursor.line * LINE_HEIGHT + PADDING_OFFSET;
 
         return (
           <div
             key={userId}
-            className="absolute pointer-events-none"
+            className="absolute pointer-events-none transition-all duration-75 ease-out"
             style={{
               left: `${x}px`,
               top: `${y}px`,
@@ -89,22 +59,29 @@ export default function OverlayLayer({
               zIndex: 10,
             }}
           >
+            {/* User Label Tag */}
             <div
-              className="absolute px-2 py-1 rounded text-xs font-bold whitespace-nowrap pointer-events-none"
+              className="absolute px-1.5 py-0.5 rounded-sm text-[10px] font-medium animate-in fade-in duration-300"
               style={{
-                top: "-24px",
-                left: "0",
+                top: "-18px", // Cursor ke thoda upar
+                left: "-2px",
                 background: color,
                 color: "white",
-                zIndex: 11,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                whiteSpace: "nowrap",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
               }}
             >
-              {userName}
+              {userName || "Anonymous"}
             </div>
           </div>
         );
       })}
+
+      {/* Baki components ko bhi future mein use karne ke liye 
+        Inko parameters pass karte waqt padding ka dhyan rakhna hoga
+      */}
+      {/* <SelectionHighlights selections={selections} /> */}
+      {/* <ErrorSquiggles diagnostics={diagnostics} /> */}
     </div>
   );
 }

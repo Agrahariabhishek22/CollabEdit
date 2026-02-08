@@ -341,7 +341,7 @@ const initializeSocketIO = async () => {
       socket.on("join-project", (data) => handleJoinProject(socket, data));
       socket.on("leave-project", (data) => handleLeaveProject(socket, data));
       socket.on("error", (error) => handleError(socket, error));
-
+ 
       // ════════════════════════════════════════════════════
       // NEW HANDLERS (Editor collaboration features)
       // These register multiple events:
