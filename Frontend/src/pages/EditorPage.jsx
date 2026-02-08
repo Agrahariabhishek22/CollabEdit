@@ -36,7 +36,8 @@ export default function EditorPage({ selectedFile, projectId }) {
       const participantsArray = data.participants
         ? Object.values(data.participants)
         : [];
-      setInitialBinary(data.initialState); // Binary state for Yjs
+      setParticipants(participantsArray);
+      setInitialBinary(data.initialState); // Binary state for Yj//s
       setIsLoading(false);
       console.log(
         `[Collab] Joined ${data.fileId} as ${data.accessMode} data is ${data.initialState}`,
@@ -105,6 +106,7 @@ export default function EditorPage({ selectedFile, projectId }) {
             ) : (
               // ✅ Context yahan initialize ho raha hai
               <EditorProvider
+              key={selectedFile.id}
                 initialBinary={initialBinary}
                 socket={socket}
                 fileId={selectedFile.id}

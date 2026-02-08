@@ -11,8 +11,17 @@ import http from "http";
 // IMPORT CONFIGS (Using your existing structure)
 // ════════════════════════════════════════════════════════════
 import { config } from "./src/config/env.js";
-import { connectDatabase, prisma, disconnectDatabase } from "./src/config/database.js";
-import { connectRedis, getRedisClient, getRedisPubSub, disconnectRedis } from "./src/config/redis.js";
+import {
+  connectDatabase,
+  prisma,
+  disconnectDatabase,
+} from "./src/config/database.js";
+import {
+  connectRedis,
+  getRedisClient,
+  getRedisPubSub,
+  disconnectRedis,
+} from "./src/config/redis.js";
 import { initSocketIO } from "./src/config/socketio.js";
 
 // ════════════════════════════════════════════════════════════
@@ -90,7 +99,7 @@ app.use(
   cors({
     origin: config.CORS_ORIGIN.split(","),
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json());
@@ -149,7 +158,7 @@ app.use(errorHandler);
 
 // ════════════════════════════════════════════════════════════
 // GLOBAL VARIABLES (Service instances)
-// 
+//
 // NOTE: These are initialized in initializeServices()
 // Made global so handlers can access them
 // ════════════════════════════════════════════════════════════
@@ -181,7 +190,7 @@ let lspHealthCheck = null;
 
 // ════════════════════════════════════════════════════════════
 // SERVICE INITIALIZATION
-// 
+//
 // PURPOSE: Initialize all services with proper dependencies
 // CALLED: After database & Redis connection established
 // ════════════════════════════════════════════════════════════
@@ -195,38 +204,38 @@ const initializeServices = async () => {
 
     // SessionManager: Tracks users, tabs, file sessions
     sessionManager = new SessionManager(redis, io);
-    
+
     // FileSessionTracker: Who's editing which file
     fileSessionTracker = new FileSessionTracker(redis, sessionManager);
-    
+
     // YjsPersistence: Handles disk read/write for Yjs
     const yjsPersistence = new YjsPersistence(prisma);
-    
+
     // YjsDocManager: Manages Shadow Y.Docs in RAM
     yjsDocManager = new YjsDocManager(redis, yjsPersistence);
-    
+
     // LSPManager: Spawns & manages language server processes
     lspManager = new LSPManager(redis);
-    
+
     // PermissionValidator: Real-time RBAC checks
     permissionValidator = new PermissionValidator(
       prisma,
       redis,
       sessionManager,
-      io
+      io,
     );
-    
+
     // RoleChangeHandler: Live role updates & revocation
     roleChangeHandler = new RoleChangeHandler(
       prisma,
       redis,
       sessionManager,
-      io
+      io,
     );
-    
+
     // CheckpointManager: Create/load checkpoints
     // checkpointManager = new CheckpointManager(prisma, yjsDocManager);
-    
+
     // VotingManager: Democratic revert system
     // votingManager = new VotingManager(redis);
 
@@ -243,7 +252,7 @@ const initializeServices = async () => {
 
 // ════════════════════════════════════════════════════════════
 // SOCKET.IO SETUP
-// 
+//
 // PURPOSE: Initialize Socket.io with all handlers
 // COMBINES: Your existing logic + new editor handlers
 // ════════════════════════════════════════════════════════════
@@ -258,7 +267,7 @@ const initializeSocketIO = async () => {
       sessionManager.setIo(io);
       console.log("✓ SessionManager synced with Socket.io");
     }
-     
+
     if (permissionValidator) {
       permissionValidator.setIo(io);
       console.log("✓ PermissionValidator synced with Socket.io");
@@ -273,14 +282,14 @@ const initializeSocketIO = async () => {
     // ════════════════════════════════════════════════════════
     // INITIALIZE SOCKET HANDLERS (New - for editor)
     // ════════════════════════════════════════════════════════
-    
+
     // YjsHandler: Real-time Yjs sync
     yjsHandler = new YjsHandler(
       io,
       yjsDocManager,
       permissionValidator,
       sessionManager,
-      redis
+      redis,
     );
 
     // LSPHandler: Code intelligence (diagnostics, completion)
@@ -288,7 +297,7 @@ const initializeSocketIO = async () => {
       io,
       lspManager,
       yjsDocManager,
-      permissionValidator
+      permissionValidator,
     );
 
     // PermissionHandler: Live role changes
@@ -296,7 +305,7 @@ const initializeSocketIO = async () => {
       io,
       roleChangeHandler,
       sessionManager,
-      redis
+      redis,
     );
 
     // CheckpointHandler: Voting system
@@ -313,7 +322,7 @@ const initializeSocketIO = async () => {
       sessionManager,
       permissionValidator,
       yjsDocManager,
-      lspManager
+      lspManager,
     );
 
     // ════════════════════════════════════════════════════════
@@ -334,7 +343,7 @@ const initializeSocketIO = async () => {
       socket.on("error", (error) => handleError(socket, error));
 
       // ════════════════════════════════════════════════════
-      // NEW HANDLERS (Editor collaboration features) 
+      // NEW HANDLERS (Editor collaboration features)
       // These register multiple events:
       // - file:join, file:leave, cursor:update (fileConnectionHandler)
       // - yjs:request-state, yjs:update, yjs:awareness (yjsHandler)
@@ -369,7 +378,7 @@ const initializeSocketIO = async () => {
 
 // ════════════════════════════════════════════════════════════
 // REDIS PUB/SUB SETUP (For Yjs horizontal scaling)
-// 
+//
 // PURPOSE: Broadcast Yjs updates across multiple server instances
 // HOW IT WORKS:
 // 1. User A types on Server 1
@@ -383,18 +392,24 @@ const initializePubSub = async () => {
 
     // Subscribe to Yjs updates
     await redisPubSub.subscribe("yjs:update:*", (message, channel) => {
-      // Extract fileId from channel name
-      const fileId = channel.replace("yjs:update:", "");
-      const data = JSON.parse(message);
+      try {
+        const fileId = channel.replace("yjs:update:", "");
+        const data = JSON.parse(message);
 
-      // Broadcast to all clients on this server EXCEPT sender
-      // NOTE: .except() prevents echo back to sender
-      io.to(`file:${fileId}`).except(data.socketId).emit("yjs:update", {
-        fileId,
-        update: data.update,
-        userId: data.userId,
-        userName: data.userName,
-      });
+        // Base64 string se wapas pure Uint8Array
+        const binaryUpdate = new Uint8Array(Buffer.from(data.update, "base64"));
+        console.log("[server-pub/sub] biaryUpdates" ,binaryUpdate);
+        
+        // Final broadcast to browser
+        io.to(`file:${fileId}`).except(data.socketId).emit("yjs:update", {
+          fileId,
+          update: binaryUpdate, // Socket.io will send this as raw binary
+          userId: data.userId,
+          userName: data.userName,
+        });
+      } catch (err) {
+        console.error("PubSub processing error:", err);
+      }
     });
 
     console.log("✓ Redis Pub/Sub active");
@@ -406,7 +421,7 @@ const initializePubSub = async () => {
 
 // ════════════════════════════════════════════════════════════
 // BACKGROUND JOBS SETUP
-// 
+//
 // PURPOSE: Automated maintenance tasks
 // JOBS:
 // 1. FlushScheduler: Flush Shadow Docs to disk every 5 min
@@ -427,7 +442,7 @@ const initializeBackgroundJobs = () => {
     sessionCleanup = new SessionCleanup(
       sessionManager,
       fileSessionTracker,
-      yjsDocManager
+      yjsDocManager,
     );
     sessionCleanup.start();
 
@@ -465,7 +480,7 @@ const startServer = async () => {
     await initializeSocketIO();
 
     // Step 5: Setup Redis Pub/Sub (new - for horizontal scaling)
-    // await initializePubSub();
+    await initializePubSub();
 
     // Step 6: Start background jobs (new - automated tasks)
     // initializeBackgroundJobs();

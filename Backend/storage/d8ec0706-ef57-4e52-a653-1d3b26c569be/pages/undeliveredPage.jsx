@@ -59,12 +59,4 @@ const UndeliveredPage = () => {
           </div>
         ) : (
           <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
-            <p className="text-slate-400 font-medium text-lg">No pending capsules found.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default UndeliveredPage;
+            <p className="text-slate-400 font-medium text-lg"

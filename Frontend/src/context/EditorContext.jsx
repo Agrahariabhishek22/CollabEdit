@@ -11,10 +11,13 @@ import * as Y from "yjs";
 export const EditorContext = createContext();
 
 export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
+  const [isReady, setIsReady] = useState(false);
+
   // ════════════════════════════════════════════════════════════
-  // YJS SETUP (CRDT Document)
+  // YJS SETUP (CRDT Document) - INITIALIZE TEXT FIRST!
   // ════════════════════════════════════════════════════════════
   const ydoc = useMemo(() => new Y.Doc(), []);
+  // 🟢 FIX: Create ytext IMMEDIATELY (not in hydration effect)
   const ytext = useMemo(() => ydoc.getText("content"), [ydoc]);
 
   // ════════════════════════════════════════════════════════════
@@ -26,37 +29,48 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
   // 1. HYDRATION: Apply initial binary state from backend
   // ════════════════════════════════════════════════════════════
   useEffect(() => {
-    // ✅ FIX: ArrayBuffer ke liye byteLength check karein
-    if (
-      initialBinary &&
-      (initialBinary.byteLength > 0 || initialBinary.length > 0)
-    ) {
-      console.log("[EditorContext] Applying initial binary state");
-      // console.log(ytext);
-      
-      // Safety check: Agar already content hai toh dobara apply mat karo (Idempotency)
-      if (ytext.toString().length === 0) {
-        const update = new Uint8Array(initialBinary);
-        Y.applyUpdate(ydoc, update);
-        console.log(
-          "[EditorContext] Hydration Complete. Length:",
-          ytext.toString().length,
-        );
-      }
+    if (!initialBinary || isReady) return;
+
+    try {
+      const update = new Uint8Array(initialBinary);
+
+      console.log("[DEBUG] Binary size:", update.length);
+      console.log("[DEBUG] First 10 bytes:", Array.from(update.slice(0, 10)));
+      // console.log("[DEBUG] ydoc before:", ydoc.share.get("content").toString());
+
+      // Try to apply
+      Y.applyUpdate(ydoc, update, "remote");
+
+      // console.log("[DEBUG] ydoc after:", ydoc.share.get("content").toString());
+      // console.log("[DEBUG] ytext toString():", ytext.toString());
+      // console.log("[DEBUG] ydoc.share:", ydoc.share);
+
+      setIsReady(true);
+    } catch (err) {
+      console.error("[ERROR] Hydration failed:", err);
+      console.error("[ERROR] Stack:", err.stack);
+      setIsReady(true);
     }
   }, [initialBinary, ydoc, ytext]);
 
   // ════════════════════════════════════════════════════════════
   // 2. OUTGOING UPDATES: When local user types
   // ════════════════════════════════════════════════════════════
+  // EditorContext.jsx में DELTA:
+
   useEffect(() => {
     const updateHandler = (update, origin) => {
       // Only send if change is local (not from remote)
       if (origin !== "remote" && socket) {
         console.log("[EditorContext] Sending local update to backend");
+        console.log("[Update bytes:", update.length);
+
+        // 🟢 Convert Uint8Array to Array for Socket.io
+        const updateArray = Array.from(update);
+
         socket.emit("yjs:update", {
           fileId,
-          update: Array.from(update), // Convert Uint8Array to array
+          update: updateArray, // ← Send as Array
         });
       }
     };
@@ -76,10 +90,19 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
 
     const handleRemoteUpdate = ({ update, userId, userName }) => {
       console.log("[EditorContext] Received remote update from:", userName);
+
+      // 🟢 FIX: Socket.io backend se binary (Buffer/ArrayBuffer) bhej raha hai
+      // Use Uint8Array mein lapeto taaki Yjs samajh sake
+      
       const binaryUpdate = new Uint8Array(update);
+      console.log("[handle remote update] inside editor context",update);
 
       // Apply with "remote" origin to prevent echo
-      Y.applyUpdate(ydoc, binaryUpdate, "remote");
+      try {
+        Y.applyUpdate(ydoc, binaryUpdate, "remote");
+      } catch (err) {
+        console.error("[EditorContext] Remote update failed:", err);
+      }
     };
 
     socket.on("yjs:update", handleRemoteUpdate);
@@ -127,6 +150,7 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
     fileId,
     awarenessStates,
     updateCursor,
+    isReady,
   };
 
   return (

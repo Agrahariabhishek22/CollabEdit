@@ -12,7 +12,7 @@ export default function EditorCore({
   accessMode,
   initialBinary,
 }) {
-  const { ydoc, ytext, awarenessStates, updateCursor } = useEditor();
+  const { ydoc, ytext, awarenessStates, updateCursor, isReady } = useEditor();
 
   // ════════════════════════════════════════════════════════════
   // STATE
@@ -31,22 +31,23 @@ export default function EditorCore({
   // ════════════════════════════════════════════════════════════
   // YJS OBSERVER: Update lines when ytext changes
   // ════════════════════════════════════════════════════════════
-  useEffect(() => {
-    if (initialBinary && ydoc) {
-      try {
-        const uint8 = new Uint8Array(initialBinary);
-        Y.applyUpdate(ydoc, uint8);
-        console.log("✅ [EditorCore] Binary applied to Y.Doc");
-      } catch (err) {
-        console.error("❌ [EditorCore] Hydration failed:", err);
-      }
-    }
-  }, [initialBinary, ydoc]);
+  // useEffect(() => {
+  //   if (initialBinary && ydoc) {
+  //     try {
+  //       const uint8 = new Uint8Array(initialBinary);
+  //       Y.applyUpdate(ydoc, uint8);
+  //       console.log("✅ [EditorCore] Binary applied to Y.Doc");
+  //     } catch (err) {
+  //       console.error("❌ [EditorCore] Hydration failed:", err);
+  //     }
+  //   }
+  // }, [initialBinary, ydoc]);
 
   // ════════════════════════════════════════════════════════════
   // OBSERVER: Split into lines for Gutter & Display
   // ════════════════════════════════════════════════════════════
   useEffect(() => {
+    if (!isReady) return; // Hook ke andar condition lagao, hook ko skip mat karo
     const observer = () => {
       const content = ytext.toString();
       const contentLines = content.split("\n");
@@ -57,7 +58,7 @@ export default function EditorCore({
     observer(); // Initial check
 
     return () => ytext.unobserve(observer);
-  }, [ytext]);
+  }, [isReady, ytext]);
 
   // ════════════════════════════════════════════════════════════
   // SCROLL SYNC: Use requestAnimationFrame for smooth, sync'd scroll
@@ -89,26 +90,55 @@ export default function EditorCore({
       }
     });
     // console.log(`[Editor Core] scrolltop:${newScrollTop} and srcollleft:${newScrollLeft}`);
-    
   }, []);
 
   // ════════════════════════════════════════════════════════════
   // INPUT HANDLER: When user types
   // ════════════════════════════════════════════════════════════
-  const handleInputChange = useCallback(
-    (newContent) => {
-      const currentContent = ytext.toString();
+  // const handleInputChange = useCallback(
+  //   (newContent) => {
+  //     const currentContent = ytext.toString();
 
-      if (newContent === currentContent) return;
+  //     if (newContent === currentContent) return;
 
-      // Replace entire content
-      ytext.delete(0, currentContent.length);
-      ytext.insert(0, newContent);
+  //     // Replace entire content
+  //     ytext.delete(0, currentContent.length);
+  //     ytext.insert(0, newContent);
 
-      console.log("[EditorCore] Content updated via Yjs");
-    },
-    [ytext],
-  );
+  //     console.log("[EditorCore] Content updated via Yjs");
+  //   },
+  //   [ytext],
+  // );
+  // EditorCore.jsx mein handleInputChange ko update karo
+// EditorCore.jsx में DELTA:
+
+const handleInputChange = useCallback(
+  (deltaOp) => {
+    if (!deltaOp || !deltaOp.type) return;
+
+    const { type, index } = deltaOp;
+
+    console.log(`[EditorCore] Applying ${type} delta at index ${index}`);
+
+    // 🟢 Transaction में apply करो
+    ydoc.transact(() => {
+      if (type === "delete") {
+        const { length } = deltaOp;
+        if (length > 0) {
+          ytext.delete(index, length);
+          console.log(`[EditorCore] Deleted ${length} chars at ${index}`);
+        }
+      } else if (type === "insert") {
+        const { text } = deltaOp;
+        if (text && text.length > 0) {
+          ytext.insert(index, text);
+          console.log(`[EditorCore] Inserted "${text}" at ${index}`);
+        }
+      }
+    });
+  },
+  [ytext, ydoc],
+);
 
   // ════════════════════════════════════════════════════════════
   // CURSOR HANDLER: Track cursor position
@@ -125,6 +155,14 @@ export default function EditorCore({
   // READ-ONLY MODE: If user is VIEWER
   // ════════════════════════════════════════════════════════════
   const isReadOnly = accessMode === "VIEWER";
+  // 3. AB SARE HOOKS KE BAAD CONDITION LAGAO
+  if (!isReady) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-slate-950 text-white">
+        Syncing with server...
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex bg-slate-950 overflow-hidden">
@@ -171,8 +209,7 @@ export default function EditorCore({
               height: `${lines.length * 24}px`,
               width: "100%", // ← CHANGE: "2000px" se "100%" kar de
             }}
-          />
-          {" "}
+          />{" "}
         </div>
       </div>
     </div>

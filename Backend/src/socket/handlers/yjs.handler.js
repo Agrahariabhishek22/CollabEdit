@@ -1,19 +1,13 @@
 // socket/handlers/yjs.handler.js
 
 class YjsHandler {
-  constructor(
-    io,
-    yjsDocManager,
-    permissionValidator,
-    sessionManager,
-    redis
-  ) {
+  constructor(io, yjsDocManager, permissionValidator, sessionManager, redis) {
     this.io = io;
     this.yjsDocManager = yjsDocManager;
     this.permissionValidator = permissionValidator;
     this.sessionManager = sessionManager;
     this.redis = redis;
-    
+
     // Debounce timers for flush
     this.flushTimers = new Map();
   }
@@ -23,7 +17,7 @@ class YjsHandler {
     // REQUEST INITIAL STATE
     // ═══════════════════════════════════════════════════════════
 
-    socket.on('yjs:request-state', async ({ fileId }) => {
+    socket.on("yjs:request-state", async ({ fileId }) => {
       await this.handleRequestState(socket, fileId);
     });
 
@@ -31,7 +25,7 @@ class YjsHandler {
     // SEND UPDATE (User types)
     // ═══════════════════════════════════════════════════════════
 
-    socket.on('yjs:update', async ({ fileId, update }) => {
+    socket.on("yjs:update", async ({ fileId, update }) => {
       await this.handleUpdate(socket, fileId, update);
     });
 
@@ -39,7 +33,7 @@ class YjsHandler {
     // AWARENESS (Cursor position)
     // ═══════════════════════════════════════════════════════════
 
-    socket.on('yjs:awareness', async ({ fileId, state }) => {
+    socket.on("yjs:awareness", async ({ fileId, state }) => {
       await this.handleAwareness(socket, fileId, state);
     });
   }
@@ -56,13 +50,13 @@ class YjsHandler {
       const validation = await this.permissionValidator.validateAction(
         userId,
         fileId,
-        'READ'
+        "READ",
       );
 
       if (!validation.allowed) {
-        return socket.emit('yjs:error', {
+        return socket.emit("yjs:error", {
           fileId,
-          message: 'Access denied',
+          message: "Access denied",
         });
       }
 
@@ -75,17 +69,18 @@ class YjsHandler {
       // Send full state to user
       const stateVector = await this.yjsDocManager.getStateVector(fileId);
 
-      socket.emit('yjs:state', {
+      socket.emit("yjs:state", {
         fileId,
         state: Array.from(stateVector), // Convert Uint8Array to array
         timestamp: Date.now(),
       });
 
-      console.log(`[Yjs] Sent initial state to ${socket.userName} for ${fileId}`);
-
+      console.log(
+        `[Yjs] Sent initial state to ${socket.userName} for ${fileId}`,
+      );
     } catch (err) {
-      console.error('[Yjs] Request state error:', err);
-      socket.emit('yjs:error', {
+      console.error("[Yjs] Request state error:", err);
+      socket.emit("yjs:error", {
         fileId,
         message: err.message,
       });
@@ -104,14 +99,14 @@ class YjsHandler {
       const validation = await this.permissionValidator.validateAction(
         userId,
         fileId,
-        'EDIT'
+        "EDIT",
       );
 
       if (!validation.allowed) {
         // CRITICAL: User lost edit permission mid-session
-        return socket.emit('permission:denied', {
+        return socket.emit("permission:denied", {
           fileId,
-          action: 'EDIT',
+          action: "EDIT",
           reason: validation.reason,
           message: validation.message,
           currentMode: validation.currentMode,
@@ -119,29 +114,44 @@ class YjsHandler {
       }
 
       // Step 2: Apply update to Shadow Y.Doc
-      const binaryUpdate = new Uint8Array(update);
+      // Sirf new Uint8Array(update) karne ki jagah Buffer logic use karein
+      const binaryUpdate = Buffer.isBuffer(update)
+        ? new Uint8Array(update)
+        : new Uint8Array(Object.values(update)); // Agar JSON array ban gaya ho toh
+
+      console.log(
+        "[yjs handler] binary update size:",
+        binaryUpdate.length,
+        binaryUpdate,
+      );
+
+      // YJS decoding check
+      if (binaryUpdate.length === 0) return;
+
       await this.yjsDocManager.applyDelta(fileId, binaryUpdate);
 
-      // Step 3: Broadcast to all OTHER users in room (via Redis Pub/Sub)
-      await this.redis.publish(
-        `yjs:update:${fileId}`,
-        JSON.stringify({
-          userId,
-          userName,
-          update: Array.from(binaryUpdate),
-          timestamp: Date.now(),
-        })
+      // socket.to(...) ka matlab hai: "Bhejne waale ko chhod kar, room mein baki sabko bhejo"
+      // Isse 'Echo' problem solve ho jati hai bina kisi extra logic ke.
+
+      console.log(
+        `[Yjs] Broadcasting update to room file:${fileId} from ${userName}`,
       );
+
+      socket.to(`file:${fileId}`).emit("yjs:update", {
+        fileId,
+        update: binaryUpdate, // Socket.io raw binary handle kar leta hai
+        userId,
+        userName,
+      });
 
       // Step 4: Schedule disk flush (debounced)
       this.scheduleDiskFlush(fileId);
 
       // Step 5: Backup to Redis (debounced)
       this.scheduleRedisBackup(fileId);
-
     } catch (err) {
-      console.error('[Yjs] Update error:', err);
-      socket.emit('yjs:error', {
+      console.error("[Yjs] Update error:", err);
+      socket.emit("yjs:error", {
         fileId,
         message: err.message,
       });
@@ -160,14 +170,13 @@ class YjsHandler {
       await this.sessionManager.updateCursorPosition(
         fileId,
         userId,
-        awarenessState.cursor
+        awarenessState.cursor,
       );
 
       // Broadcast to others (already handled in SessionManager)
       // No additional action needed here
-
     } catch (err) {
-      console.error('[Yjs] Awareness error:', err);
+      console.error("[Yjs] Awareness error:", err);
     }
   }
 
@@ -187,7 +196,7 @@ class YjsHandler {
         await this.yjsDocManager.flushToDisk(fileId);
         console.log(`[Yjs] Flushed ${fileId} to disk`);
       } catch (err) {
-        console.error('[Yjs] Flush error:', err);
+        console.error("[Yjs] Flush error:", err);
       }
       this.flushTimers.delete(fileId);
     }, 30 * 1000); // 30 seconds
@@ -204,8 +213,9 @@ class YjsHandler {
     setTimeout(async () => {
       try {
         await this.yjsDocManager.backupToRedis(fileId);
+        console.log(`[Yjs] Flushed ${fileId} to redis backup`);
       } catch (err) {
-        console.error('[Yjs] Redis backup error:', err);
+        console.error("[Yjs] Redis backup error:", err);
       }
     }, 2000);
   }
