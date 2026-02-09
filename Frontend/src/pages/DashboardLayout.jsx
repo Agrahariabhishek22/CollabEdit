@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import Sidebar from "../components/Sidebar";
-import EditorContainer from "../components/EditorContainer";
-import ContextMenu from "../components/ContextMenu";
-import HeaderStrip from "../components/HeaderStrip";
+import Sidebar from "../components/Common/Sidebar";
+import EditorContainer from "../components/Common/EditorContainer";
+import ContextMenu from "../components/Common/ContextMenu";
+import HeaderStrip from "../components/Common/HeaderStrip";
 import InvitationModal from "../modals/InvitationModal";
 import EditorPage from "./EditorPage";
 

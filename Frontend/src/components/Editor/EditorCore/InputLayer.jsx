@@ -71,9 +71,9 @@ const InputLayer = forwardRef(
 
       // 🟢 SEND DELTA OPERATIONS
       if (deleteLength > 0) {
-        console.log(
-          `[InputLayer] DELETE at ${startIndex}, length: ${deleteLength}`,
-        );
+        // console.log(
+        //   `[InputLayer] DELETE at ${startIndex}, length: ${deleteLength}`,
+        // );
         onChange({
           type: "delete",
           index: startIndex,
@@ -82,9 +82,9 @@ const InputLayer = forwardRef(
       }
 
       if (insertedText.length > 0) {
-        console.log(
-          `[InputLayer] INSERT at ${startIndex}, text: "${insertedText}"`,
-        );
+        // console.log(
+        //   `[InputLayer] INSERT at ${startIndex}, text: "${insertedText}"`,
+        // );
         onChange({
           type: "insert",
           index: startIndex,
@@ -114,7 +114,7 @@ const InputLayer = forwardRef(
       const lines = textBeforeCursor.split("\n");
       const line = lines.length - 1;
       const column = lines[lines.length - 1].length;
-      console.log("[Input layer update cursor position",line,column);
+      // console.log("[Input layer update cursor position",line,column);
       
       onCursorChange(line, column);
     };
@@ -141,7 +141,7 @@ const InputLayer = forwardRef(
           WebkitFontSmoothing: "antialiased",
           textRendering: "optimizeLegibility",
           color: "transparent", // Transparent so only caret shows
-          caretColor: "white",
+          caretColor: "transparent",
           opacity: 1,
           zIndex: 2,
           overflow: "hidden",

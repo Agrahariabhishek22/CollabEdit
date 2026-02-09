@@ -1,8 +1,8 @@
 import React from "react";
-import CollaborativeCursors from "./CollaborativeCursors";
+import CollaborativeCursors from "../CollaborativeCursors";
 import ErrorSquiggles from "./ErrorSquiggles";
 import ConflictMarkers from "./ConflictMarkers";
-import SelectionHighlights from "./SelectionHighlights";
+import SelectionHighlights from "../SelectionHighlights";
 
 const LINE_HEIGHT = 20;
 

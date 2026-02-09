@@ -25,6 +25,7 @@
     "socket.io-client": "^4.8.3",
     "tailwind-scrollbar-hide": "^4.0.0",
     "tailwindcss": "^4.1.18",
+    "web-tree-sitter": "^0.26.5",
     "yjs": "^13.6.29"
   },
   "devDependencies": {

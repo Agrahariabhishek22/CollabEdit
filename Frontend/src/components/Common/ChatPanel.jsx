@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Send, Loader } from "lucide-react";
-import { useSocket } from "../hooks/useSocket";
+import { useSocket } from "../../hooks/useSocket";
 
 export default function ChatPanel({ projectId, fileId }) {
   const [messages, setMessages] = useState([]);

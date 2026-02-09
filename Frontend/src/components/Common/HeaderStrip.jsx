@@ -11,10 +11,10 @@ import {
   LogOut, // Logout icon add kiya
   GitBranch,
 } from "lucide-react";
-import ScanModal from "../modals/LocalScanModal";
-import GitCloneModal from "../modals/GitCloneModal";
+import ScanModal from "../../modals/LocalScanModal";
+import GitCloneModal from "../../modals/GitCloneModal";
 import axios from "axios";
-import { scanFolder } from "../utils/useFileScanner";
+import { scanFolder } from "../../utils/useFileScanner";
 import { toast } from "react-toastify";
 import NotificationPopover from "./NotificationPopover";
 

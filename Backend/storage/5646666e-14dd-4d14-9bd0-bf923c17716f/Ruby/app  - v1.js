@@ -13,5 +13,6 @@ server.listen(3000, '0.0.0.0', () => {
 kaisa ldka h
 ai tu hgygygygygygygyhhhrjbtjherhbeeeeeeewe
 
+server ="this is me";
 
 

@@ -6,11 +6,9 @@ import DisplayLayer from "./DisplayLayer";
 import InputLayer from "./InputLayer";
 import OverlayLayer from "./OverlayLayer";
 import { useEditor } from "../../../hooks/useEditor";
+import WidgetLayer from "./WidgetLayer";
 
-export default function EditorCore({
-  selectedFile,
-  accessMode,
-}) {
+export default function EditorCore({ selectedFile, accessMode }) {
   const { ydoc, ytext, awarenessStates, updateCursor, isReady } = useEditor();
 
   // ════════════════════════════════════════════════════════════
@@ -26,21 +24,6 @@ export default function EditorCore({
   const displayLayerRef = useRef(null);
   const gutterPanelRef = useRef(null);
   const overlayLayerRef = useRef(null);
-
-  // ════════════════════════════════════════════════════════════
-  // YJS OBSERVER: Update lines when ytext changes
-  // ════════════════════════════════════════════════════════════
-  // useEffect(() => {
-  //   if (initialBinary && ydoc) {
-  //     try {
-  //       const uint8 = new Uint8Array(initialBinary);
-  //       Y.applyUpdate(ydoc, uint8);
-  //       console.log("✅ [EditorCore] Binary applied to Y.Doc");
-  //     } catch (err) {
-  //       console.error("❌ [EditorCore] Hydration failed:", err);
-  //     }
-  //   }
-  // }, [initialBinary, ydoc]);
 
   // ════════════════════════════════════════════════════════════
   // OBSERVER: Split into lines for Gutter & Display
@@ -91,53 +74,33 @@ export default function EditorCore({
     // console.log(`[Editor Core] scrolltop:${newScrollTop} and srcollleft:${newScrollLeft}`);
   }, []);
 
-  // ════════════════════════════════════════════════════════════
-  // INPUT HANDLER: When user types
-  // ════════════════════════════════════════════════════════════
-  // const handleInputChange = useCallback(
-  //   (newContent) => {
-  //     const currentContent = ytext.toString();
+  const handleInputChange = useCallback(
+    (deltaOp) => {
+      if (!deltaOp || !deltaOp.type) return;
 
-  //     if (newContent === currentContent) return;
+      const { type, index } = deltaOp;
 
-  //     // Replace entire content
-  //     ytext.delete(0, currentContent.length);
-  //     ytext.insert(0, newContent);
+      console.log(`[EditorCore] Applying ${type} delta at index ${index}`);
 
-  //     console.log("[EditorCore] Content updated via Yjs");
-  //   },
-  //   [ytext],
-  // );
-  // EditorCore.jsx mein handleInputChange ko update karo
-// EditorCore.jsx में DELTA:
-
-const handleInputChange = useCallback(
-  (deltaOp) => {
-    if (!deltaOp || !deltaOp.type) return;
-
-    const { type, index } = deltaOp;
-
-    console.log(`[EditorCore] Applying ${type} delta at index ${index}`);
-
-    // 🟢 Transaction में apply करो
-    ydoc.transact(() => {
-      if (type === "delete") {
-        const { length } = deltaOp;
-        if (length > 0) {
-          ytext.delete(index, length);
-          console.log(`[EditorCore] Deleted ${length} chars at ${index}`);
+      // 🟢 Transaction में apply करो
+      ydoc.transact(() => {
+        if (type === "delete") {
+          const { length } = deltaOp;
+          if (length > 0) {
+            ytext.delete(index, length);
+            console.log(`[EditorCore] Deleted ${length} chars at ${index}`);
+          }
+        } else if (type === "insert") {
+          const { text } = deltaOp;
+          if (text && text.length > 0) {
+            ytext.insert(index, text);
+            console.log(`[EditorCore] Inserted "${text}" at ${index}`);
+          }
         }
-      } else if (type === "insert") {
-        const { text } = deltaOp;
-        if (text && text.length > 0) {
-          ytext.insert(index, text);
-          console.log(`[EditorCore] Inserted "${text}" at ${index}`);
-        }
-      }
-    });
-  },
-  [ytext, ydoc],
-);
+      });
+    },
+    [ytext, ydoc],
+  );
 
   // ════════════════════════════════════════════════════════════
   // CURSOR HANDLER: Track cursor position
@@ -149,6 +112,46 @@ const handleInputChange = useCallback(
     },
     [updateCursor],
   );
+
+const handleDeltaInsert = useCallback(
+  (deltaOp) => {
+    // 🟢 Pass delta to InputLayer
+    handleInputChange(deltaOp);
+    
+    // 🟢 Move cursor after inserted text
+    if (deltaOp.type === "insert" && inputLayerRef.current) {
+      const newCursorPos = deltaOp.index + deltaOp.text.length;
+      
+      requestAnimationFrame(() => {
+        inputLayerRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        inputLayerRef.current.focus();
+      });
+    }
+  },
+  [handleInputChange],
+);
+
+const handleSmartIndent = useCallback(
+  (indent) => {
+    const textarea = inputLayerRef.current;
+    if (!textarea) return;
+
+    const cursorPos = textarea.selectionStart;
+    
+    handleInputChange({
+      type: "insert",
+      index: cursorPos,
+      text: "\n" + indent,
+    });
+
+    // 🟢 Move cursor to end of indent
+    const newCursorPos = cursorPos + 1 + indent.length;
+    requestAnimationFrame(() => {
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    });
+  },
+  [handleInputChange],
+);
 
   // ════════════════════════════════════════════════════════════
   // READ-ONLY MODE: If user is VIEWER
@@ -201,11 +204,21 @@ const handleInputChange = useCallback(
             awarenessStates={awarenessStates}
             // currentUserId={currentUserId}
           />
+          <WidgetLayer
+            content={ytext.toString()}
+            scrollTop={scrollTop}
+            scrollLeft={scrollLeft}
+            cursorPosition={cursorPosition}
+            inputLayerRef={inputLayerRef}
+            selectedFile={selectedFile}
+            onDeltaInsert={handleDeltaInsert}
+            onSmartIndent={handleSmartIndent}
+          />
           {/* 4. GHOST DIV: Browser ko scrollbar dene ke liye majboor karega */}
           <div
             style={{
               height: `${lines.length * 24}px`,
-              width: "100%", // ← CHANGE: "2000px" se "100%" kar de
+              width: "1000px", // ← CHANGE: "2000px" se "100%" kar de
             }}
           />{" "}
         </div>

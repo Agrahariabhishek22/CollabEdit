@@ -63,7 +63,7 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
       // Only send if change is local (not from remote)
       if (origin !== "remote" && socket) {
         console.log("[EditorContext] Sending local update to backend");
-        console.log("[Update bytes:", update.length);
+        // console.log("[Update bytes:", update.length);
 
         // 🟢 Convert Uint8Array to Array for Socket.io
         const updateArray = Array.from(update);
@@ -172,14 +172,14 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
   // 4. Debugging ke liye alag useEffect (taaki hamesha latest state dikhe)
   useEffect(() => {
     if (awarenessStates.length > 0) {
-      console.log("[Awareness] Current Collabs:", awarenessStates);
+      // console.log("[Awareness] Current Collabs:", awarenessStates);
     }
   }, [awarenessStates]);
 
   // Send local cursor updates
   const updateCursor = (line, column) => {
     if (!socket) return;
-    console.log("[EditorContext] Sending cursor update:", line, column);
+    // console.log("[EditorContext] Sending cursor update:", line, column);
     socket.emit("cursor:update", {
       fileId,
       cursor: { line, column },

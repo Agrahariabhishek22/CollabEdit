@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { useSocket } from "../../../hooks/useSocket";
+// CollaborativeCursors.jsx - Update करो
+
+import React, { useEffect, useState } from "react";
 
 const USER_COLORS = [
   "#FF6B6B",
@@ -12,90 +13,57 @@ const USER_COLORS = [
   "#85C1E2",
 ];
 
-const CHAR_WIDTH = 8.4; // Monospace character width in pixels
-const LINE_HEIGHT = 20; // Must match CSS
+const CHAR_WIDTH = 8.43;    // ← OverlayLayer जैसा
+const LINE_HEIGHT = 24;     // ← OverlayLayer जैसा
+const PADDING_OFFSET = 10;  // ← OverlayLayer जैसा
 
-/**
- * CollaborativeCursors Component
- * 
- * Displays real-time cursors of all collaborators using Yjs Awareness
- * 
- * Data Flow:
- * 1. Listen to awareness.on('change')
- * 2. Get cursor position { line, column, color, name }
- * 3. Calculate pixel position: x = column * CHAR_WIDTH, y = line * LINE_HEIGHT
- * 4. Render cursor div with floating label
- * 5. Update on awareness changes (new cursor position)
- */
 export default function CollaborativeCursors({
   awarenessStates,
   currentUserId,
   scrollTop,
+  scrollLeft,
 }) {
-  const [cursors, setCursors] = useState([]);
-
-  // Update cursors when awareness states change
-  useEffect(() => {
-    if (!awarenessStates || awarenessStates.length === 0) {
-      setCursors([]);
-      return;
-    }
-
-    const newCursors = awarenessStates
-      .filter((state) => state.user.clientID !== currentUserId && state.cursor)
-      .map((state, index) => ({
-        id: state.user.clientID,
-        name: state.user.name || `User ${index + 1}`,
-        email: state.user.email || "Anonymous",
-        color: USER_COLORS[index % USER_COLORS.length],
-        cursor: state.cursor,
-      }));
-
-    setCursors(newCursors);
-  }, [awarenessStates, currentUserId]);
+  if (!awarenessStates || awarenessStates.length === 0) {
+    return null;
+  }
 
   return (
     <>
-      {cursors.map((cursor) => {
-        // Calculate pixel position
-        const x = cursor.cursor.column * CHAR_WIDTH;
-        const y = cursor.cursor.line * LINE_HEIGHT - scrollTop;
+      {awarenessStates.map((state) => {
+        const { userId, userName, cursor, color = "#FF6B6B" } = state;
 
-        // Skip if cursor is off-screen
-        if (y < -50 || y > window.innerHeight + 50) {
-          return null;
-        }
+        // Current user का cursor skip कर
+        // if (!cursor || userId === currentUserId) return null;
+
+        // Position calculation - OverlayLayer जैसा
+        const x = cursor.column * CHAR_WIDTH + PADDING_OFFSET;
+        const y = cursor.line * LINE_HEIGHT + PADDING_OFFSET;
 
         return (
           <div
-            key={cursor.id}
-            className="absolute pointer-events-none z-40"
+            key={userId}
+            className="absolute pointer-events-none transition-all duration-75 ease-out"
             style={{
               left: `${x}px`,
-              top: `${y + 16}px`, // 16px offset for padding
-              transform: "translateX(-2px)",
+              top: `${y}px`,
+              height: `${LINE_HEIGHT}px`,
+              borderLeft: `2px solid ${color}`,
+              zIndex: 10,
             }}
           >
-            {/* Cursor line */}
+            {/* User Label Tag */}
             <div
-              className="w-0.5 h-5 absolute"
+              className="absolute px-1.5 py-0.5 rounded-sm text-[10px] font-medium animate-in fade-in duration-300"
               style={{
-                backgroundColor: cursor.color,
-                boxShadow: `0 0 3px ${cursor.color}`,
-                animation: "blink 1s infinite",
+                top: "-18px",
+                left: "-2px",
+                background: color,
+                color: "white",
+                whiteSpace: "nowrap",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
               }}
-            />
-
-            {/* Name label */}
-            <div
-              className="absolute top-full mt-1 px-2 py-0.5 rounded text-xs font-medium text-white whitespace-nowrap"
-              style={{
-                backgroundColor: cursor.color,
-                left: "-8px",
-              }}
-              title={cursor.email}
             >
-              {cursor.name}
+              {userName || "Anonymous"}
             </div>
           </div>
         );

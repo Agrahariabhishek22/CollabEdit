@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import EditorHeader from "../components/Editor/EditorHeader/EditorHeader";
-import { EditorCore } from "../components/Editor/EditorCore";
 // import ChatPanel from "../components/ChatPanel";
 import toast from "react-hot-toast";
 import { useSocket } from "../hooks/useSocket";
 import { EditorProvider } from "../context/EditorContext";
+import EditorCore from "../components/Editor/EditorCore/EditorCore";
 
 export default function EditorPage({ selectedFile, projectId }) {
   const { socket } = useSocket();

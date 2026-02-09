@@ -1,12 +1,21 @@
-const http = require('http');
+function factorial(n) {
+    // Input validation
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
+        throw new Error("Input must be a non-negative integer.");
+    }
 
-const server = http.createServer((req, res) => {
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'text/plain');
-  res.end('Hello! Your Node app is running inside Docker!\n');
-});
+    // Base case
+    if (n === 0 || n === 1) return 1;
 
-// The app listens on port 3000
-server.listen(3000, '0.0.0.0', () => {
-  console.log('Server running at http://0.0.0.0:3000/');
-});
+    // Recursive calculation
+    return n * factorial(n - 1);
+}
+
+// Example usage:
+try {
+    console.log(factorial(5));  // 120
+    console.log(factorial(0));  // 1
+    console.log(factorial(10)); // 3628800
+} catch (error) {
+    console.error("Error:", error.message);
+}
