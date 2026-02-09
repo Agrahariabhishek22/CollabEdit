@@ -13,7 +13,7 @@ import {
   Github,
   Monitor,
   Search, // Added Search icon
-  X,      // Added X icon for clearing search
+  X, // Added X icon for clearing search
 } from "lucide-react";
 import FileTree from "./FileTree";
 import axios from "axios";
@@ -24,7 +24,7 @@ export default function Sidebar({
   onSelectFile,
   onContextMenu,
   onInviteClick,
-  onRefresh
+  onRefresh,
 }) {
   const [activeTab, setActiveTab] = useState("LOCAL");
   const [files, setFiles] = useState([]);
@@ -85,52 +85,57 @@ export default function Sidebar({
   }, [onRefresh]); // Refresh trigger hone par fetch karein
 
   // --- FILTERING LOGIC (The Core Change) ---
-const displayedFiles = useMemo(() => {
-  // 1. Pehle Tab ke base par files alag karo
-  let tabFiltered = files.filter((file) => {
-    if (activeTab === "GIT") return file.sourceType === "GIT";
-    return file.sourceType === "LOCAL" || file.sourceType === "UI_CREATED";
-  });
+  const displayedFiles = useMemo(() => {
+    // 1. Pehle Tab ke base par files alag karo
+    let tabFiltered = files.filter((file) => {
+      if (activeTab === "GIT") return file.sourceType === "GIT";
+      return file.sourceType === "LOCAL" || file.sourceType === "UI_CREATED";
+    });
 
-  if (searchQuery.trim() === "") return tabFiltered;
+    if (searchQuery.trim() === "") return tabFiltered;
 
-  // 2. Recursive Search Function
-  const getFilteredTree = (items, query) => {
-    return items.reduce((acc, item) => {
-      const isMatch = item.name.toLowerCase().includes(query.toLowerCase());
+    // 2. Recursive Search Function
+    const getFilteredTree = (items, query) => {
+      return items.reduce((acc, item) => {
+        const isMatch = item.name.toLowerCase().includes(query.toLowerCase());
 
-      // Agar ye folder hai, toh iske bachon (children) mein dhoondo
-      if (item.isFolder && item.children) {
-        const matchingChildren = getFilteredTree(item.children, query);
-        
-        // Agar folder ke andar kuch match mila, toh folder ko rakho aur bache dikhao
-        if (matchingChildren.length > 0) {
-          acc.push({ 
-            ...item, 
-            children: matchingChildren, 
-            isExpanded: true // Search ke waqt folder apne aap khul jana chahiye
-          });
-          return acc;
+        // Agar ye folder hai, toh iske bachon (children) mein dhoondo
+        if (item.isFolder && item.children) {
+          const matchingChildren = getFilteredTree(item.children, query);
+
+          // Agar folder ke andar kuch match mila, toh folder ko rakho aur bache dikhao
+          if (matchingChildren.length > 0) {
+            acc.push({
+              ...item,
+              children: matchingChildren,
+              isExpanded: true, // Search ke waqt folder apne aap khul jana chahiye
+            });
+            return acc;
+          }
         }
-      }
 
-      // Agar file/folder ka naam khud match kar gaya, toh use add karo
-      if (isMatch) {
-        acc.push(item);
-      }
+        // Agar file/folder ka naam khud match kar gaya, toh use add karo
+        if (isMatch) {
+          acc.push(item);
+        }
 
-      return acc;
-    }, []);
-  };
+        return acc;
+      }, []);
+    };
 
-  return getFilteredTree(tabFiltered, searchQuery);
-}, [files, activeTab, searchQuery]);
+    return getFilteredTree(tabFiltered, searchQuery);
+  }, [files, activeTab, searchQuery]);
 
-  const handleFolderExpand = async (folderId) => {
+  const handleFolderExpand = async (folder) => {
+    const folderId = folder.id;
+
+    // --- YAHAN CHANGE HAI ---
+    // Folder select karne par bhi state update ho jaye
+    onSelectFile(folder);
     try {
       const res = await axios.get(
         `http://localhost:3000/api/explorer/subtree/folder/${folderId}`,
-        { withCredentials: true }
+        { withCredentials: true },
       );
       const children = res.data.data;
 
@@ -155,7 +160,7 @@ const displayedFiles = useMemo(() => {
 
   const handleToolbarAction = async (action) => {
     if (action === "REFRESH") {
-      onRefresh(); 
+      onRefresh();
       return;
     }
 
@@ -165,7 +170,8 @@ const displayedFiles = useMemo(() => {
 
     try {
       // Logic same as before, using projectId from filtered list context
-      const currentProjectId = displayedFiles.length > 0 ? displayedFiles[0].projectId : null;
+      const currentProjectId =
+        displayedFiles.length > 0 ? displayedFiles[0].projectId : null;
 
       if (!currentProjectId) {
         toast.error("Bhai, pehle koi project select karo!");
@@ -179,14 +185,13 @@ const displayedFiles = useMemo(() => {
           projectId: currentProjectId,
           name: name,
           isFolder: isFolder,
-          content: ""
+          content: "",
         },
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
-      toast.success(`${isFolder ? 'Folder' : 'File'} "${name}" ban gaya!`);
+      toast.success(`${isFolder ? "Folder" : "File"} "${name}" ban gaya!`);
       onRefresh();
-      
     } catch (err) {
       toast.error(err.response?.data?.message || "Creation failed!");
     }
@@ -200,7 +205,10 @@ const displayedFiles = useMemo(() => {
       {/* Tab Selector */}
       <div className="flex p-2 gap-1 bg-slate-900/50">
         <button
-          onClick={() => { setActiveTab("LOCAL"); setSearchQuery(""); }}
+          onClick={() => {
+            setActiveTab("LOCAL");
+            setSearchQuery("");
+          }}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
             activeTab === "LOCAL"
               ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
@@ -210,7 +218,10 @@ const displayedFiles = useMemo(() => {
           <Monitor size={14} /> Local
         </button>
         <button
-          onClick={() => { setActiveTab("GIT"); setSearchQuery(""); }}
+          onClick={() => {
+            setActiveTab("GIT");
+            setSearchQuery("");
+          }}
           className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
             activeTab === "GIT"
               ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
@@ -225,13 +236,25 @@ const displayedFiles = useMemo(() => {
       <div className="flex flex-col border-b border-slate-800/50 bg-slate-900/20">
         {/* Actions Row */}
         <div className="flex items-center justify-around p-2">
-          <button onClick={() => handleToolbarAction("NEW_FILE")} className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-indigo-400 transition-colors" title="New File">
+          <button
+            onClick={() => handleToolbarAction("NEW_FILE")}
+            className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-indigo-400 transition-colors"
+            title="New File"
+          >
             <Plus size={14} />
           </button>
-          <button onClick={() => handleToolbarAction("NEW_FOLDER")} className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-indigo-400 transition-colors" title="New Folder">
+          <button
+            onClick={() => handleToolbarAction("NEW_FOLDER")}
+            className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-indigo-400 transition-colors"
+            title="New Folder"
+          >
             <FolderPlus size={14} />
           </button>
-          <button onClick={() => handleToolbarAction("REFRESH")} className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-indigo-400 transition-colors" title="Refresh">
+          <button
+            onClick={() => handleToolbarAction("REFRESH")}
+            className="p-1 hover:bg-slate-800 rounded text-slate-500 hover:text-indigo-400 transition-colors"
+            title="Refresh"
+          >
             <RotateCw size={14} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
@@ -239,8 +262,11 @@ const displayedFiles = useMemo(() => {
         {/* Search Input Row */}
         <div className="px-2 pb-2">
           <div className="relative group">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-500 transition-colors" size={12} />
-            <input 
+            <Search
+              className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-500 transition-colors"
+              size={12}
+            />
+            <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -248,7 +274,7 @@ const displayedFiles = useMemo(() => {
               className="w-full bg-slate-950/50 border border-slate-800 rounded-md py-1.5 pl-7 pr-7 text-[11px] text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 transition-all placeholder:text-slate-700"
             />
             {searchQuery && (
-              <button 
+              <button
                 onClick={() => setSearchQuery("")}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300"
               >
@@ -264,7 +290,9 @@ const displayedFiles = useMemo(() => {
         {loading ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <Loader2 className="animate-spin text-indigo-500" size={20} />
-            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">Syncing Tree...</span>
+            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
+              Syncing Tree...
+            </span>
           </div>
         ) : (
           <FileTree
@@ -276,19 +304,24 @@ const displayedFiles = useMemo(() => {
             onInviteClick={onInviteClick}
           />
         )}
-        
+
         {/* Empty State for Search or Empty Tab */}
         {!loading && displayedFiles.length === 0 && (
           <div className="flex flex-col items-center justify-center h-32 px-4 text-center">
             <p className="text-[10px] text-slate-600 font-medium uppercase tracking-widest">
-              {searchQuery ? "No matches found" : `No ${activeTab.toLowerCase()} items`}
+              {searchQuery
+                ? "No matches found"
+                : `No ${activeTab.toLowerCase()} items`}
             </p>
           </div>
         )}
       </div>
 
       {/* Resizer Handle */}
-      <div onMouseDown={startResizing} className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-indigo-500/50 transition-colors active:bg-indigo-600 z-50" />
+      <div
+        onMouseDown={startResizing}
+        className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-indigo-500/50 transition-colors active:bg-indigo-600 z-50"
+      />
     </div>
   );
 }

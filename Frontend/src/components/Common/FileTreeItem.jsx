@@ -24,7 +24,7 @@ const FileTreeItem = ({
   const handleInteraction = (e) => {
     e.stopPropagation();
     if (item.isFolder) {
-      onFolderExpand(item.id);
+      onFolderExpand(item);
     } else {
       onSelectFile(item);
     }

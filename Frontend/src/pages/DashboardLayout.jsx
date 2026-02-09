@@ -5,11 +5,13 @@ import ContextMenu from "../components/Common/ContextMenu";
 import HeaderStrip from "../components/Common/HeaderStrip";
 import InvitationModal from "../modals/InvitationModal";
 import EditorPage from "./EditorPage";
+import GitWorkspace from "./GitWorkspace";
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [activeView, setActiveView] = useState("EDITOR"); // "EDITOR" or "GIT_REPO"
+  const [activeView, setActiveView] = useState("EDITOR"); // "EDITOR", "GIT_WORKSPACE", or "GIT_EDITOR"
+  const [currentGitProject, setCurrentGitProject] = useState(null); // Store Git project details
   const [openTabs, setOpenTabs] = useState([]);
   const [contextMenu, setContextMenu] = useState(null);
   const [unreadNotifs, setUnreadNotifs] = useState(3); // Example live sync state
@@ -23,12 +25,27 @@ export default function DashboardLayout() {
   // Sidebar se file select hone par logic
   const handleFileSelect = (file) => {
     setSelectedFile(file);
-    // Agar source GIT hai aur folder hai, toh REPO view dikhao
+    console.log("Selecting file" ,file);
+    
+    // Agar source GIT hai aur folder hai, toh GIT_WORKSPACE view dikhao
     if (file.sourceType === "GIT" && file.isFolder) {
-      setActiveView("GIT_REPO");
+      console.log("Switching to Git Workspace for folder:", file);
+      setCurrentGitProject(file);
+      setActiveView("GIT_WORKSPACE");
     } else {
       setActiveView("EDITOR");
     }
+  };
+
+  // When file is selected from GitWorkspace, open it in editor
+  const handleOpenEditorFromGit = (file) => {
+    setSelectedFile(file);
+    setActiveView("GIT_EDITOR");
+  };
+
+  // Go back to GitWorkspace from Editor
+  const handleBackToGitWorkspace = () => {
+    setActiveView("GIT_WORKSPACE");
   };
 
   return (
@@ -60,16 +77,30 @@ export default function DashboardLayout() {
           />
         </div>
 
-        {/* Editor or Git Repo Dashboard */}
-        <main className="flex-1 relative bg-slate-950">
-          {/* <EditorContainer
+      {/* Editor or Git Workspace */}
+      <main className="flex-1 relative bg-slate-950">
+        {activeView === "GIT_WORKSPACE" && currentGitProject && (
+          <GitWorkspace
+            project={currentGitProject}
+            onBackToDashboard={() => setActiveView("EDITOR")}
+            onOpenEditor={handleOpenEditorFromGit}
+          />
+        )}
+        {activeView === "GIT_EDITOR" && (
+          <EditorPage
             selectedFile={selectedFile}
-            activeView={activeView}
-            openTabs={openTabs}
-            setOpenTabs={setOpenTabs}
-          /> */}
-          <EditorPage selectedFile={selectedFile} projectId={selectedFile?.projectId||null} />
-        </main>
+            projectId={selectedFile?.projectId || null}
+            isGitMode={true}
+            onBack={handleBackToGitWorkspace}
+          />
+        )}
+        {activeView === "EDITOR" &&selectedFile (
+          <EditorPage
+            selectedFile={selectedFile}
+            projectId={selectedFile?.projectId || null}
+          />
+        )}
+      </main>
       </div>
 
       {/* 3. Global Context Menu Portal */}

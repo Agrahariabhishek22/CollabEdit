@@ -5,8 +5,9 @@ import toast from "react-hot-toast";
 import { useSocket } from "../hooks/useSocket";
 import { EditorProvider } from "../context/EditorContext";
 import EditorCore from "../components/Editor/EditorCore/EditorCore";
+import { ArrowLeft } from "lucide-react";
 
-export default function EditorPage({ selectedFile, projectId }) {
+export default function EditorPage({ selectedFile, projectId, isGitMode = false, onBack = null }) {
   const { socket } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -87,6 +88,19 @@ export default function EditorPage({ selectedFile, projectId }) {
 
   return (
     <div className="flex flex-col h-full bg-slate-950">
+      {/* Git Mode Back Button */}
+      {isGitMode && (
+        <div className="flex items-center px-4 h-12 border-b border-slate-800/50 bg-slate-900/40">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors text-sm"
+          >
+            <ArrowLeft size={16} />
+            <span>Back to Files</span>
+          </button>
+        </div>
+      )}
+
       {/* Editor Header: Ab participants bhi dikhayega (Avatars) */}
       {/* <EditorHeader
         selectedFile={selectedFile}
