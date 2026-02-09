@@ -1,16 +1,29 @@
 // components/Editor/EditorCore/DisplayLayer.jsx
 
 import React, { forwardRef, useMemo } from "react";
-import { highlightCode } from "../../../utils/syntaxHighlighter copy";
+import {  applyHighlights, highlightCodeWithTreeSitter } from "../../../utils/syntaxHighlighter";
+import { useTreeSitter } from "../../../hooks/useTreeSitter";
 
 const DisplayLayer = forwardRef(({ lines, selectedFile, scrollTop, scrollLeft }, ref) => {
-  const highlightedLines = useMemo(() => {
     const language = detectLanguage(selectedFile?.name);
-    const fullContent = lines.join("\n");
-    const fullHtml = highlightCode(fullContent, language);
-    // console.log(lines.length);
-    return fullHtml.split("\n");
-  }, [lines, selectedFile]);
+  const content = lines.join("\n");
+  
+  // 🟢 Get tree from useTreeSitter
+  const { tree } = useTreeSitter(content, language);
+
+  // 🟢 Generate highlights from tree
+  const highlights = useMemo(() => {
+    if (!tree) return [];
+    return highlightCodeWithTreeSitter(content, tree, language);
+  }, [tree, content, language]);
+
+  // 🟢 Apply highlights to HTML
+  const highlightedHtml = useMemo(() => {
+    return applyHighlights(content, highlights);
+  }, [content, highlights]);
+
+  // Split into lines for rendering
+  const htmlLines = highlightedHtml.split("\n");
 
   return (
     <div
@@ -38,7 +51,7 @@ const DisplayLayer = forwardRef(({ lines, selectedFile, scrollTop, scrollLeft },
         width: "4000px"
       }}
     >
-      {highlightedLines.map((htmlLine, idx) => (
+      {htmlLines.map((htmlLine, idx) => (
         <div
           key={idx}
           style={{

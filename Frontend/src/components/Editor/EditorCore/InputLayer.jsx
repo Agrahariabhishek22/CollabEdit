@@ -11,6 +11,8 @@ const InputLayer = forwardRef(
     const lastContentRef = useRef(content);
 
     const lineCount = content ? content.split("\n").length : 1;
+    // console.log("lineCount:", lineCount);
+    
     const lineHeight = 24;
     const totalHeight = lineCount * lineHeight + 20;
 
@@ -143,6 +145,7 @@ const InputLayer = forwardRef(
           color: "transparent", // Transparent so only caret shows
           caretColor: "transparent",
           opacity: 1,
+          // backgroundColor: "black",
           zIndex: 2,
           overflow: "hidden",
           height: `${totalHeight}px`,

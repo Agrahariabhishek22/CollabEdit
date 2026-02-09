@@ -1,8 +1,11 @@
 // components/Editor/WidgetLayer/index.jsx
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { useTreeSitter, getIndentLevelAtCursor } from "../../../hooks/useTreeSitter";
-import { useAutocomplete } from "../../../hooks/useAutocomplete";
+import {
+  useTreeSitter,
+  getIndentLevelAtCursor,
+} from "../../../hooks/useTreeSitter";
+import { useAutocomplete } from "../../../hooks/useAutoComplete";
 import { useSmartIndent } from "../../../hooks/useSmartIndent";
 import SuggestionDropdown from "./WidgetLayer/SuggestionDropdown";
 import SyntaxErrorWidget from "./WidgetLayer/SyntaxErrorWidget";
@@ -14,19 +17,30 @@ export default function WidgetLayer({
   cursorPosition,
   inputLayerRef,
   selectedFile,
-  onDeltaInsert, // 🟢 New: Accept delta instead of full text
+  onDeltaInsert,
   onSmartIndent,
 }) {
+  // console.log(
+  //   "[Widget layer]Scroll top and Scroll left",
+  //   scrollTop,
+  //   scrollLeft,
+  // );
+
   const language = detectLanguage(selectedFile?.name);
   const { tree, errors, loading } = useTreeSitter(content, language);
-  const { generateSuggestions } = useAutocomplete(content, tree, null, language);
+  const { generateSuggestions } = useAutocomplete(
+    content,
+    tree,
+    null,
+    language,
+  );
   const { getSmartIndent } = useSmartIndent(tree, content);
 
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [dropdownPosition, setDropdownPosition] = useState({ x: 0, y: 0 });
   const [currentPrefix, setCurrentPrefix] = useState("");
-  const [prefixStartIndex, setPrefixStartIndex] = useState(0); // 🟢 Store where prefix started
+  const [prefixStartIndex, setPrefixStartIndex] = useState(0);
 
   // 🟢 Monitor input for autocomplete trigger
   useEffect(() => {
@@ -35,32 +49,38 @@ export default function WidgetLayer({
     const handleInput = (e) => {
       const textarea = e.target;
       const cursorPos = textarea.selectionStart;
-      // console.log(textarea.selectionStart, textarea.selectionEnd);
-      
+
+      // 🛠️ FIX: Live DOM values uthao taaki stale props ka issue na ho
+      const liveScrollLeft = textarea.scrollLeft;
+      const liveScrollTop = textarea.scrollTop;
+
       const textBeforeCursor = textarea.value.substring(0, cursorPos);
       const lines = textBeforeCursor.split("\n");
       const currentLine = lines[lines.length - 1];
 
-      // Extract word at cursor
       const wordMatch = currentLine.match(/\b([a-zA-Z_$][a-zA-Z0-9_$]*)$/);
       const prefix = wordMatch ? wordMatch[1] : "";
 
       if (prefix.length > 1) {
-        // Calculate where prefix started in the full content
+        // Calculate logic for prefix start
         const lineStart = textBeforeCursor.length - currentLine.length;
         const prefixStart = lineStart + (currentLine.length - prefix.length);
-        
-        setCurrentPrefix(prefix);
-        setPrefixStartIndex(prefixStart); // 🟢 Store for later use
 
-        // Generate suggestions
+        setCurrentPrefix(prefix);
+        setPrefixStartIndex(prefixStart);
+
+        // Suggestions generate karo
         const sug = generateSuggestions(prefix, cursorPos);
         setSuggestions(sug);
 
-        // Position dropdown
+        // POSITIONING LOGIC
         const charIndex = currentLine.length - prefix.length;
-        const x = charIndex * 8.43 + 10;
-        const y = (lines.length - 1) * 24 + 10 + 24;
+
+        // x calculation: Char width * index + padding - LIVE scroll
+        const x = charIndex * 8.43 + 10 - liveScrollLeft;
+
+        // y calculation: Line number * height + padding + height - LIVE scroll
+        const y = (lines.length - 1) * 24 + 10 + 24 - liveScrollTop;
 
         setDropdownPosition({ x, y });
         setDropdownVisible(sug.length > 0);
@@ -73,36 +93,51 @@ export default function WidgetLayer({
     return () => {
       inputLayerRef.current?.removeEventListener("input", handleInput);
     };
-  }, [generateSuggestions, inputLayerRef, loading]);
+  }, [generateSuggestions, inputLayerRef, loading]); // Stale scrollTop/Left dependency ki zarurat nahi ab
+
+  // 🟢 Handle suggestion selection - SEND ONLY DELTA
+  const handleSelectSuggestion = (suggestion) => {
+    if (!onDeltaInsert) return;
+
+    console.log(
+      `[WidgetLayer] Selected: "${suggestion.text}" to replace prefix "${currentPrefix}"`,
+    );
+
+    const textToInsert = suggestion.text.substring(currentPrefix.length);
+
+    if (textToInsert.length === 0) {
+      setDropdownVisible(false);
+      return;
+    }
+
+    onDeltaInsert({
+      type: "insert",
+      index: prefixStartIndex + currentPrefix.length,
+      text: textToInsert,
+    });
+
+    setDropdownVisible(false);
+    setCurrentPrefix("");
+    setPrefixStartIndex(0);
+  };
 
   // 🟢 Handle special keys
   useEffect(() => {
     if (!inputLayerRef?.current || loading) return;
 
     const handleKeyDown = (e) => {
-      // Tab: Accept suggestion
-      if (e.key === "Tab" && dropdownVisible && suggestions.length > 0) {
-        e.preventDefault();
-        handleSelectSuggestion(suggestions[0]);
-        return;
-      }
-
-      // Enter: Smart indent
       if (e.key === "Enter") {
+        // Enter press hone par agar dropdown khula hai toh smart indent ya select trigger ho sakta hai
+        // Filhaal smart indent logic:
         const textarea = e.target;
         const cursorPos = textarea.selectionStart;
         const indent = getSmartIndent(cursorPos);
 
         if (onSmartIndent) {
+          e.preventDefault();
           onSmartIndent(indent);
         }
 
-        setDropdownVisible(false);
-        return;
-      }
-
-      // Escape: Close dropdown
-      if (e.key === "Escape") {
         setDropdownVisible(false);
       }
     };
@@ -111,47 +146,7 @@ export default function WidgetLayer({
     return () => {
       inputLayerRef.current?.removeEventListener("keydown", handleKeyDown);
     };
-  }, [
-    getSmartIndent,
-    onSmartIndent,
-    inputLayerRef,
-    loading,
-    dropdownVisible,
-    suggestions,
-  ]);
-
-  // 🟢 Handle suggestion selection - SEND ONLY DELTA
-  const handleSelectSuggestion = (suggestion) => {
-    if (!onDeltaInsert) return;
-
-    console.log(
-      `[WidgetLayer] Selected: "${suggestion.text}" to replace prefix "${currentPrefix}"`
-    );
-
-    // 🟢 Calculate what to insert (suggestion minus the prefix already typed)
-    const textToInsert = suggestion.text.substring(currentPrefix.length);
-
-    if (textToInsert.length === 0) {
-      console.log("[WidgetLayer] No additional text to insert");
-      setDropdownVisible(false);
-      return;
-    }
-
-    // 🟢 Send delta: Insert only the remaining part of suggestion
-    onDeltaInsert({
-      type: "insert",
-      index: prefixStartIndex + currentPrefix.length, // Position right after prefix
-      text: textToInsert,
-    });
-
-    console.log(
-      `[WidgetLayer] Delta: INSERT "${textToInsert}" at index ${prefixStartIndex + currentPrefix.length}`
-    );
-
-    setDropdownVisible(false);
-    setCurrentPrefix("");
-    setPrefixStartIndex(0);
-  };
+  }, [getSmartIndent, onSmartIndent, inputLayerRef, loading]);
 
   if (loading) {
     return (
@@ -163,10 +158,11 @@ export default function WidgetLayer({
 
   return (
     <div className="absolute inset-0 pointer-events-none z-40">
-      {/* Autocomplete Dropdown */}
       <div className="pointer-events-auto">
         <SuggestionDropdown
           suggestions={suggestions}
+          scrollTop={scrollTop}
+          scrollLeft={scrollLeft}
           visible={dropdownVisible}
           position={dropdownPosition}
           onSelect={handleSelectSuggestion}
@@ -174,7 +170,6 @@ export default function WidgetLayer({
         />
       </div>
 
-      {/* Syntax Error Highlights */}
       <SyntaxErrorWidget
         errors={errors}
         scrollTop={scrollTop}
@@ -198,6 +193,8 @@ function detectLanguage(filename) {
     c: "cpp",
     h: "cpp",
     hpp: "cpp",
+    java: "java",
+    py: "python",
   };
   return langMap[ext] || "javascript";
 }

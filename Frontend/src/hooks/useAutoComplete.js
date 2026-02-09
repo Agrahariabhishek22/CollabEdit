@@ -19,6 +19,7 @@ export function useAutocomplete(content, tree, triggerChar = null, language = "j
   useEffect(() => {
     const identifiers = extractIdentifiers(content, language);
     const freqMap = new Map();
+    console.log(`[Autocomplete] Generated ${identifiers.length} identifiers for "${language}"`);
 
     identifiers.forEach((id) => {
       freqMap.set(id, (freqMap.get(id) || 0) + 1);
@@ -97,7 +98,7 @@ function calculateScore(candidate, prefix, cursorIndex, frequency) {
   // (Can implement by tracking cursor position changes)
   const recencyScore = 15; // Placeholder
 
-  score = frequencyScore + prefixMatchScore + recencyScore;
+  score = frequencyScore + prefixMatchScore ;
 
   console.log(
     `[Score] "${candidate}": freq=${frequencyScore.toFixed(1)}, prefix=${prefixMatchScore.toFixed(1)}, total=${score.toFixed(1)}`

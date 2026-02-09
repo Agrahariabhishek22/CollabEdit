@@ -18,6 +18,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
   const [cursorPosition, setCursorPosition] = useState({ line: 0, column: 0 });
   const [scrollTop, setScrollTop] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0); // ← NEW
+  const [layerHeight, setLayerHeight] = useState(0);
 
   const scrollContainerRef = useRef(null);
   const inputLayerRef = useRef(null);
@@ -34,6 +35,11 @@ export default function EditorCore({ selectedFile, accessMode }) {
       const content = ytext.toString();
       const contentLines = content.split("\n");
       setLines(contentLines);
+      // console.log("lineCount:", lineCount);
+
+      const lineHeight = 24;
+      const totalHeight = contentLines.length * lineHeight + 20;
+      setLayerHeight(totalHeight);
     };
 
     ytext.observe(observer);
@@ -94,7 +100,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
           const { text } = deltaOp;
           if (text && text.length > 0) {
             ytext.insert(index, text);
-            console.log(`[EditorCore] Inserted "${text}" at ${index}`);
+            // console.log(`[EditorCore] Inserted "${text}" at ${index}`);
           }
         }
       });
@@ -113,45 +119,49 @@ export default function EditorCore({ selectedFile, accessMode }) {
     [updateCursor],
   );
 
-const handleDeltaInsert = useCallback(
-  (deltaOp) => {
-    // 🟢 Pass delta to InputLayer
-    handleInputChange(deltaOp);
-    
-    // 🟢 Move cursor after inserted text
-    if (deltaOp.type === "insert" && inputLayerRef.current) {
-      const newCursorPos = deltaOp.index + deltaOp.text.length;
-      
-      requestAnimationFrame(() => {
-        inputLayerRef.current.setSelectionRange(newCursorPos, newCursorPos);
-        inputLayerRef.current.focus();
+  // handling delta insert from widget layer(autocomplete)
+  const handleDeltaInsert = useCallback(
+    (deltaOp) => {
+      // 🟢 Pass delta to InputLayer
+      handleInputChange(deltaOp);
+
+      // 🟢 Move cursor after inserted text
+      if (deltaOp.type === "insert" && inputLayerRef.current) {
+        const newCursorPos = deltaOp.index + deltaOp.text.length;
+
+        setTimeout(() => {
+          if (inputLayerRef.current) {
+            inputLayerRef.current.selectionStart = newCursorPos;
+            inputLayerRef.current.selectionEnd = newCursorPos;
+            inputLayerRef.current.focus();
+          }
+        }, 0);
+      }
+    },
+    [handleInputChange],
+  );
+
+  const handleSmartIndent = useCallback(
+    (indent) => {
+      const textarea = inputLayerRef.current;
+      if (!textarea) return;
+
+      const cursorPos = textarea.selectionStart;
+
+      handleInputChange({
+        type: "insert",
+        index: cursorPos,
+        text: "\n" + indent,
       });
-    }
-  },
-  [handleInputChange],
-);
 
-const handleSmartIndent = useCallback(
-  (indent) => {
-    const textarea = inputLayerRef.current;
-    if (!textarea) return;
-
-    const cursorPos = textarea.selectionStart;
-    
-    handleInputChange({
-      type: "insert",
-      index: cursorPos,
-      text: "\n" + indent,
-    });
-
-    // 🟢 Move cursor to end of indent
-    const newCursorPos = cursorPos + 1 + indent.length;
-    requestAnimationFrame(() => {
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    });
-  },
-  [handleInputChange],
-);
+      // 🟢 Move cursor to end of indent
+      const newCursorPos = cursorPos + 1 + indent.length;
+      requestAnimationFrame(() => {
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+      });
+    },
+    [handleInputChange,inputLayerRef],
+  );
 
   // ════════════════════════════════════════════════════════════
   // READ-ONLY MODE: If user is VIEWER
@@ -188,6 +198,7 @@ const handleSmartIndent = useCallback(
             ref={displayLayerRef}
             lines={lines}
             selectedFile={selectedFile}
+            scrollTop={scrollTop}
             scrollLeft={scrollLeft}
           />
           <InputLayer
@@ -202,6 +213,7 @@ const handleSmartIndent = useCallback(
             scrollTop={scrollTop}
             scrollLeft={scrollLeft}
             awarenessStates={awarenessStates}
+            layerHeight={layerHeight}
             // currentUserId={currentUserId}
           />
           <WidgetLayer

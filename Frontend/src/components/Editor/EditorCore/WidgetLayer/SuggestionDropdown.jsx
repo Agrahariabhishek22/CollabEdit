@@ -1,15 +1,29 @@
 // components/Editor/WidgetLayer/SuggestionDropdown.jsx
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 export default function SuggestionDropdown({
   suggestions,
   visible,
   position,
   onSelect,
+  scrollTop,
+  scrollLeft,
   onDismiss,
 }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        onDismiss();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [onDismiss]);
 
   // Reset selection when suggestions change
   useEffect(() => {
@@ -21,26 +35,34 @@ export default function SuggestionDropdown({
     if (!visible) return;
 
     const handleKeyDown = (e) => {
+      // 🟢 Sabse pehle dropdown ki keys ko block karo taaki editor interfere na kare
+      const navigationKeys = ["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"];
+      if (navigationKeys.includes(e.key)) {
+        // e.stopImmediatePropagation(); // Zarurat pade toh use karein
+      }
+
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setSelectedIndex((prev) =>
-          Math.min(prev + 1, suggestions.length - 1)
-        );
+        setSelectedIndex((prev) => (prev + 1) % suggestions.length); // Loop back to start
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setSelectedIndex((prev) => Math.max(prev - 1, 0));
+        setSelectedIndex(
+          (prev) => (prev - 1 + suggestions.length) % suggestions.length,
+        ); // Loop to end
       } else if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        if (suggestions.length > 0) {
+        if (suggestions[selectedIndex]) {
           onSelect(suggestions[selectedIndex]);
         }
       } else if (e.key === "Escape") {
+        e.preventDefault();
         onDismiss();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // 🟢 'capture' phase use karein taaki dropdown editor se pehle key pakad le
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [visible, suggestions, selectedIndex, onSelect, onDismiss]);
 
   if (!visible || !suggestions || suggestions.length === 0) {
@@ -51,8 +73,8 @@ export default function SuggestionDropdown({
     <div
       className="absolute bg-slate-800 border border-slate-600 rounded shadow-lg z-50"
       style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
+        left: `${position.x - scrollLeft}px`,
+        top: `${position.y - scrollTop}px`,
         minWidth: "200px",
         maxWidth: "300px",
         maxHeight: "200px",

@@ -1,5 +1,3 @@
-// hooks/useTreeSitter.js
-
 import { useEffect, useRef, useState } from "react";
 // import * as Parser from "web-tree-sitter";
 
@@ -13,8 +11,11 @@ const LANGUAGE_URLS = {
   typescript:
     "https://cdn.jsdelivr.net/npm/tree-sitter-typescript@0.20.8/tree-sitter-typescript.wasm",
   cpp: "https://cdn.jsdelivr.net/npm/tree-sitter-cpp@0.20.8/tree-sitter-cpp.wasm",
-  jsx: "https://cdn.jsdelivr.net/npm/tree-sitter-javascript@0.20.3/tree-sitter-javascript.wasm", // Same as JS
+  java: "https://cdn.jsdelivr.net/npm/tree-sitter-java@0.20.2/tree-sitter-java.wasm",
+  jsx: "https://cdn.jsdelivr.net/npm/tree-sitter-javascript@0.20.3/tree-sitter-javascript.wasm",
   tsx: "https://cdn.jsdelivr.net/npm/tree-sitter-typescript@0.20.8/tree-sitter-typescript.wasm",
+  python:
+    "https://cdn.jsdelivr.net/npm/tree-sitter-python@0.20.4/tree-sitter-python.wasm",
 };
 
 // 🟢 Initialize parser once globally
@@ -70,70 +71,144 @@ export function useTreeSitter(content, language = "javascript") {
   const [tree, setTree] = useState(null);
   const [errors, setErrors] = useState([]);
   const [loading, setLoading] = useState(true);
+
   const parserRef = useRef(null);
   const languageRef = useRef(null);
   const lastContentRef = useRef("");
 
-  // 🟢 Initialize parser & language once
+  // 🟢 1. Initialize parser & language
   useEffect(() => {
     const setup = async () => {
       try {
         if (!parserRef.current) {
           parserRef.current = await initializeParser();
+          console.log("[Tree-sitter] 🛠️ Parser Initialized");
         }
 
         if (language !== languageRef.current?.type) {
           const lang = await loadLanguage(language);
           languageRef.current = lang;
           parserRef.current.setLanguage(lang);
-          console.log(`[Tree-sitter] Language set to ${language}`);
+          console.log(`[Tree-sitter] 🌐 Language switched to: ${language}`);
         }
-
         setLoading(false);
       } catch (err) {
-        console.error("[Tree-sitter] Setup error:", err);
+        console.error("[Tree-sitter] ❌ Setup error:", err);
         setLoading(false);
       }
     };
-
     setup();
   }, [language]);
 
-  // 🟢 Parse content incrementally
+  // 🟢 2. Parse content incrementally with Heavy Logging
   useEffect(() => {
-    if (loading || !parserRef.current || content === lastContentRef.current) {
+    const currentContent = content || "";
+
+    if (
+      loading ||
+      !parserRef.current ||
+      currentContent === lastContentRef.current
+    ) {
       return;
     }
 
-    const parseCode = () => {
-      try {
-        console.log(`[Tree-sitter] Parsing ${content.length} chars...`);
+    // 🟢 REMOVE debounce - parse immediately for live errors
+    try {
+      console.time("[Tree-sitter]");
 
-        // 🟢 Incremental parse (fast!)
-        const newTree = parserRef.current.parse(content, tree);
-        setTree(newTree);
-        console.log("[useTreeSitter] Tree updated:", newTree);
-        
-        lastContentRef.current = content;
+      const newTree = parserRef.current.parse(currentContent, tree);
 
-        // 🟢 Extract errors
-        // const foundErrors = findSyntaxErrors(newTree, content);
-        // setErrors(foundErrors);
-        // console.log(
-        //   `[Tree-sitter] ✅ Parsed successfully. Error length: ${foundErrors.length}`,
-        // );
-        // console.log(
-        //   `[Tree-sitter] ✅ Parsed successfully. Error length: ${foundErrors.length} and errors are ${foundErrors.map((e) => e.message).join(", ")}`,
-        // );
-      } catch (err) {
-        console.error("[Tree-sitter] Parse error:", err);
+      // 🟢 CRITICAL: Ref को immediately update करो
+      lastContentRef.current = currentContent;
+
+      // 🟢 Enhanced error detection
+      const foundErrors = findSyntaxErrors(newTree, currentContent);
+
+      // 🟢 Also check for incomplete patterns
+      // const patternErrors = findPatternErrors(currentContent);
+      const allErrors = [...foundErrors];
+
+      setTree(newTree);
+      setErrors(allErrors);
+
+      console.timeEnd("[Tree-sitter]");
+      console.log(`[Tree-sitter Live] ✅ Errors: ${allErrors.length}`);
+
+      if (allErrors.length > 0) {
+        console.warn("[Tree-sitter] Live Errors:", allErrors);
       }
-    };
+    } catch (err) {
+      console.error("[Tree-sitter] Parse error:", err);
+    }
+  }, [content, loading, tree]);
+  // function findPatternErrors(content) {
+  //   const errors = [];
+  //   const lines = content.split("\n");
 
-    // Debounce parsing to avoid CPU churn
-    const timeout = setTimeout(parseCode, 2000);
-    return () => clearTimeout(timeout);
-  }, [content, tree, loading]);
+  //   lines.forEach((line, lineIdx) => {
+  //     const trimmed = line.trim();
+
+  //     // ❌ const/let/var without assignment
+  //     if (/^(const|let|var)\s+\w+\s*[=;]?\s*$/.test(trimmed)) {
+  //       if (trimmed.endsWith("=") || trimmed.endsWith("=;")) {
+  //         errors.push({
+  //           type: "incomplete_assignment",
+  //           message: "Incomplete assignment - value expected",
+  //           line: lineIdx,
+  //           column: trimmed.length,
+  //           startIndex: content.indexOf(
+  //             trimmed,
+  //             content.indexOf(`\n${lineIdx}`) + 1,
+  //           ),
+  //           endIndex: content.indexOf(trimmed) + trimmed.length,
+  //         });
+  //       }
+  //     }
+
+  //     // ❌ if/for/while without proper closing
+  //     if (/^(if|for|while|function)\s*\([^)]*$/.test(trimmed)) {
+  //       if (!trimmed.includes(")")) {
+  //         errors.push({
+  //           type: "unclosed_parenthesis",
+  //           message: "Missing closing parenthesis",
+  //           line: lineIdx,
+  //           column: trimmed.length,
+  //           startIndex: content.indexOf(trimmed),
+  //           endIndex: content.indexOf(trimmed) + trimmed.length,
+  //         });
+  //       }
+  //     }
+
+  //     // ❌ Opening brace without closing
+  //     const openBraces = (trimmed.match(/\{/g) || []).length;
+  //     const closeBraces = (trimmed.match(/\}/g) || []).length;
+  //     if (openBraces > closeBraces) {
+  //       errors.push({
+  //         type: "unclosed_brace",
+  //         message: "Missing closing brace '}'",
+  //         line: lineIdx,
+  //         column: trimmed.length,
+  //         startIndex: content.indexOf(trimmed),
+  //         endIndex: content.indexOf(trimmed) + trimmed.length,
+  //       });
+  //     }
+
+  //     // ❌ Missing closing parenthesis
+  //     const openParens = (trimmed.match(/\(/g) || []).length;
+  //     const closeParens = (trimmed.match(/\)/g) || []).length;
+  //     if (openParens > closeParens) {
+  //       errors.push({
+  //         type: "unclosed_parenthesis",
+  //         message: "Missing closing parenthesis ')'",
+  //         line: lineIdx,
+  //         column: trimmed.length,
+  //         startIndex: content.indexOf(trimmed),
+  //         endIndex: content.indexOf(trimmed) + trimmed.length,
+  //       });
+  //     }
+  //   });
+  //   return errors;
+  // }
 
   return { tree, errors, loading };
 }
@@ -141,15 +216,21 @@ export function useTreeSitter(content, language = "javascript") {
 // 🟢 Find syntax errors in AST
 function findSyntaxErrors(tree, content) {
   const errors = [];
+  const cursor = tree.walk(); // 🟢 Tree-sitter ka official cursor
 
-  function traverse(node) {
-    // Find ERROR nodes
-    if (node.type === "ERROR" || node.isMissing) {
+  let reachedEnd = false;
+  while (!reachedEnd) {
+    const node = cursor.currentNode();
+
+    // 🔴 Agar node ERROR hai ya MISSING hai (jaise bracket bhool gaye)
+    if (node.type === "ERROR" || node.isMissing()) {
       const { startPosition, endPosition } = node;
 
       errors.push({
         type: "syntax_error",
-        message: `Unexpected token: "${content.substring(node.startIndex, node.endIndex).substring(0, 20)}"`,
+        message: node.isMissing()
+          ? `Missing: "${node.type}"`
+          : `Unexpected token: "${content.substring(node.startIndex, node.endIndex).substring(0, 20)}"`,
         line: startPosition.row,
         column: startPosition.column,
         endLine: endPosition.row,
@@ -159,38 +240,21 @@ function findSyntaxErrors(tree, content) {
       });
     }
 
-    // Check for unclosed strings/brackets
-    if (node.type === "string" || node.type === "template_string") {
-      const text = content.substring(node.startIndex, node.endIndex);
-      const quote = text[0];
+    // 🟡 Tree mein aage badhne ka logic
+    if (cursor.gotoFirstChild()) {
+      continue;
+    }
 
-      if (!text.endsWith(quote) || text.length < 2) {
-        errors.push({
-          type: "unclosed_string",
-          message: "Unclosed string literal",
-          line: node.startPosition.row,
-          column: node.startPosition.column,
-          endLine: node.endPosition.row,
-          endColumn: node.endPosition.column,
-          startIndex: node.startIndex,
-          endIndex: node.endIndex,
-        });
+    while (!cursor.gotoNextSibling()) {
+      if (!cursor.gotoParent()) {
+        reachedEnd = true;
+        break;
       }
     }
-
-    // Recursively traverse children
-    for (let child of node.children || []) {
-      traverse(child);
-    }
-  }
-
-  if (tree) {
-    traverse(tree.rootNode);
   }
 
   return errors;
 }
-
 // 🟢 Get indent level at cursor
 export function getIndentLevelAtCursor(tree, cursorIndex) {
   if (!tree) return 0;
