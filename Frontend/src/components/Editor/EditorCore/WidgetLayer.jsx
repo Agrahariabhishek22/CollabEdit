@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { useTreeSitter, getIndentLevelAtCursor } from "../../../hooks/useTreeSitter";
-import { useAutocomplete } from "../../../hooks/useAutocomplete";
+import { useAutocomplete } from "../../../hooks/useAutoComplete";
 import { useSmartIndent } from "../../../hooks/useSmartIndent";
 import SuggestionDropdown from "./WidgetLayer/SuggestionDropdown";
 import SyntaxErrorWidget from "./WidgetLayer/SyntaxErrorWidget";
