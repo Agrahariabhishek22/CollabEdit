@@ -1,6 +1,8 @@
 // components/Editor/EditorCore/InputLayer.jsx
 
 import React, { forwardRef, useRef, useEffect } from "react";
+import { useState } from "react";
+import { useTreeSitter } from "../../../hooks/useTreeSitter";
 
 const InputLayer = forwardRef(
   (

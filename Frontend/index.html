@@ -10,8 +10,12 @@
       rel="stylesheet"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- <script src="https://cdn.jsdelivr.net/npm/web-tree-sitter@0.20.8/tree-sitter.js"></script> -->
-    <script src="/tree-sitter.js"></script>
+    <!-- <script src="/tree-sitter.js"></script> -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/web-tree-sitter@0.23.2/tree-sitter.min.js"></script> -->
+     <script type="module">
+      import TreeSitter from '/parsers/tree-sitter.js';
+      window.TreeSitter = TreeSitter; 
+    </script>
     <title>Collab-Edit</title>
   </head>
   <body>

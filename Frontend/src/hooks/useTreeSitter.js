@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import TreeSitterManager from "./TreeSitterManager";
 
-export function useTreeSitter(content, language = "javascript") {
+export function useTreeSitter(content, language = "javascript",editData=null) {
   const [tree, setTree] = useState(null);
   const [errors, setErrors] = useState([]);
   const [loading, setLoading] = useState(true);

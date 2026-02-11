@@ -228,7 +228,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
             // currentUserId={currentUserId}
           />
           <WidgetLayer
-            content={content}
+            content={ytext.toString()}
             scrollTop={scrollTop}
             scrollLeft={scrollLeft}
             inputLayerRef={inputLayerRef}
