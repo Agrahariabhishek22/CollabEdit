@@ -12,6 +12,7 @@ import { UserPlus } from "lucide-react";
 const FileTreeItem = ({
   item,
   level,
+  setCurrentGitProject,
   selectedFile,
   onSelectFile,
   onFolderExpand,
@@ -24,7 +25,10 @@ const FileTreeItem = ({
   const handleInteraction = (e) => {
     e.stopPropagation();
     if (item.isFolder) {
-      onFolderExpand(item);
+      if (item.sourceType === "GIT") {
+        setCurrentGitProject(item);
+      }
+      onFolderExpand(item.id);
     } else {
       onSelectFile(item);
     }
@@ -81,10 +85,10 @@ const FileTreeItem = ({
 
         {/* Invite Button - Visible on Hover */}
         <div className="flex items-center gap-2 pr-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button 
+          <button
             onClick={(e) => {
               console.log(item);
-              
+
               e.stopPropagation();
               onInviteClick(item);
             }}
@@ -93,7 +97,6 @@ const FileTreeItem = ({
             <UserPlus size={13} />
           </button>
         </div>
-
       </div>
 
       {/* 2. Nested Sub-Tree (Tailwind Animation) */}
@@ -109,6 +112,7 @@ const FileTreeItem = ({
               key={child.id}
               item={child}
               level={level + 1}
+              setCurrentGitProject={setCurrentGitProject}
               selectedFile={selectedFile}
               onSelectFile={onSelectFile}
               onFolderExpand={onFolderExpand}

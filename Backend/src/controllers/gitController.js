@@ -13,13 +13,14 @@
 
 import { randomUUID } from "crypto";
 import fs from "fs";
-import path from 'node:path';
+import path from "node:path";
 import { simpleGit } from "simple-git";
 import { asyncHandler, AppError } from "../middlewares/errorHandler.js";
 import { prisma } from "../config/database.js";
 import { getRedisClient } from "../config/redis.js";
 import { getIO } from "../config/socketio.js";
 import { fileURLToPath } from "url";
+import { log } from "node:console";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -151,7 +152,7 @@ const getFileStats = async (filePath) => {
  *
  * Returns: true if lock acquired, false if already locked
  */
-const acquireBranchLock = async (projectId) => {
+export const acquireBranchLock = async (projectId) => {
   const io = getIO();
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -188,7 +189,7 @@ const acquireBranchLock = async (projectId) => {
  * Release branch lock after switch completes
  * WHY: Allow next user to switch branches
  */
-const releaseBranchLock = async (projectId) => {
+export const releaseBranchLock = async (projectId) => {
   const io = getIO();
   await prisma.project.update({
     where: { id: projectId },
@@ -249,26 +250,26 @@ const syncDirectoryToDb = async (
       let content = null;
 
       // For files: check size & read content
-      if (!item.isDirectory()) {
-        const stats = await getFileStats(fullPath);
-        if (stats) {
-          fileSize = stats.size;
-          isLargeFile = stats.size > MAX_FILE_SIZE;
+      // if (!item.isDirectory()) {
+      //   const stats = await getFileStats(fullPath);
+      //   if (stats) {
+      //     fileSize = stats.size;
+      //     isLargeFile = stats.size > MAX_FILE_SIZE;
 
-          // WHY: Only read content if NOT binary AND NOT large
-          // Prevents memory exhaustion and binary content corruption
-          if (!isBinary && !isLargeFile) {
-            try {
-              content = await fs.promises.readFile(fullPath, "utf-8");
-            } catch (err) {
-              console.warn(
-                `[GitController] Could not read file ${fullPath}: ${err.message}`,
-              );
-              content = null;
-            }
-          }
-        }
-      }
+      //     // WHY: Only read content if NOT binary AND NOT large
+      //     // Prevents memory exhaustion and binary content corruption
+      //     if (!isBinary && !isLargeFile) {
+      //       try {
+      //         content = await fs.promises.readFile(fullPath, "utf-8");
+      //       } catch (err) {
+      //         console.warn(
+      //           `[GitController] Could not read file ${fullPath}: ${err.message}`,
+      //         );
+      //         content = null;
+      //       }
+      //     }
+      //   }
+      // }
 
       // Create FileMeta record
       const meta = await tx.fileMeta.create({
@@ -345,10 +346,10 @@ const syncDirectoryToDb = async (
 export const cloneGitRepository = asyncHandler(async (req, res) => {
   const redis = getRedisClient();
   const io = getIO();
-  
+
   const { repoUrl } = req.body;
   const userId = req.user.id;
-  console.log("inside clonning a repo",repoUrl);
+  console.log("inside clonning a repo", repoUrl);
 
   if (!repoUrl) {
     throw new AppError("Repository URL is required", 400);
@@ -414,11 +415,11 @@ export const cloneGitRepository = asyncHandler(async (req, res) => {
       },
     });
     await prisma.collaboratorDetail.create({
-      data:{
-        fileMetaId:rootFolderMeta.id,
-        adminId:userId
-      }
-    })
+      data: {
+        fileMetaId: rootFolderMeta.id,
+        adminId: userId,
+      },
+    });
 
     // 4. LINK ROOT TO PROJECT
     await prisma.project.update({
@@ -502,6 +503,7 @@ export const switchBranch = asyncHandler(async (req, res) => {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
     });
+    const rootId = project?.rootFileMetaId;
 
     if (!project) {
       throw new AppError("Project not found", 404);
@@ -542,7 +544,13 @@ export const switchBranch = asyncHandler(async (req, res) => {
 
       // Step 5: Get OLD structure (current DB state)
       const oldFiles = await prisma.fileMeta.findMany({
-        where: { projectId, isDeleted: false },
+        where: {
+          projectId,
+          // isDeleted: false,
+          id: {
+            not: rootId,
+          },
+        },
         select: { id: true, absolutePath: true },
       });
 
@@ -568,79 +576,69 @@ export const switchBranch = asyncHandler(async (req, res) => {
 
       await crawlNewStructure(project.rootPath);
 
+      // console.log("Crawled Files:", Array.from(newFiles));
+
       console.log(
         `[GitController] New structure crawled: ${newFiles.size} items`,
       );
 
       // Step 7: Smart Sync Logic
+      // Step 7: Smart Sync Logic
       await prisma.$transaction(async (tx) => {
-        // Mark files that disappeared as deleted
+        // 1. Purani files handle karo (Delete/Restore)
         for (const [oldPath, oldMeta] of oldFileMap) {
-          if (!newFiles.has(oldPath)) {
-            console.log(`[GitController] Marking ${oldPath} as deleted`);
-            await tx.fileMeta.update({
-              where: { id: oldMeta.id },
-              data: { isDeleted: true },
-            });
-          }
+          const existsNow = newFiles.has(oldPath);
+          await tx.fileMeta.update({
+            where: { id: oldMeta.id },
+            data: { isDeleted: !existsNow },
+          });
+          if (!existsNow)
+            console.log(`[GitController] Marked ${oldPath} as deleted`);
         }
 
-        // For files that still exist, update content
+        // 2. Nayi files handle karo
         for (const newPath of newFiles) {
-          if (oldFileMap.has(newPath)) {
-            const oldMeta = oldFileMap.get(newPath);
-            const stats = await getFileStats(newPath);
-            const isBinary = isFileBinary(newPath);
-            const isLargeFile = stats && stats.size > MAX_FILE_SIZE;
-            let content = null;
+          if (!oldFileMap.has(newPath)) {
+            // Parent path nikal lo (e.g., /a/b/c.txt -> /a/b)
+            const parentPath = path.dirname(newPath);
 
-            if (!isBinary && !isLargeFile && stats) {
-              try {
-                content = await fs.promises.readFile(newPath, "utf-8");
-              } catch (err) {
-                console.warn(`[GitController] Could not read ${newPath}`);
-              }
-            }
-
-            // Update EditorState if it exists
-            if (content) {
-              await tx.editorState.upsert({
-                where: { fileMetaId: oldMeta.id },
-                create: { fileMetaId: oldMeta.id, content },
-                update: { content },
-              });
-            }
-
-            // Update file metadata
-            await tx.fileMeta.update({
-              where: { id: oldMeta.id },
-              data: {
-                isBinary,
-                isLargeFile,
-                fileSize: stats?.size,
+            // Parent directory ka Meta ID dhundho DB mein
+            const parentMeta = await tx.fileMeta.findFirst({
+              where: {
+                projectId,
+                absolutePath: parentPath,
               },
             });
-          } else {
-            // NEW file - create it
-            // (This uses the same logic as initial sync)
-            // For brevity, we'll skip full implementation here
-            // In production, you'd call a helper function
+
+            // Agar parentMeta mil jata hai toh uska ID use karo,
+            // warna project ka rootId default rakho
+            const effectiveParentId = parentMeta ? parentMeta.id : rootId;
+
+            console.log(
+              `[GitController] Syncing new item: ${newPath} under parent: ${parentPath}`,
+            );
+
+            // syncDirectoryToDb call karo parent context ke sath
             await syncDirectoryToDb(
-              project.rootPath,
+              parentPath, // New file path ka ek step up wala (Slashed path)
               project.id,
               userId,
-              rootFileMeta.id,
+              effectiveParentId, // Uss parent path ki Meta ID
               tx,
               new Map(),
             );
+
+            // Note: loop break na ho jaye isliye logic handle karna padega
+            // agar syncDirectoryToDb poori tree crawl kar raha hai.
           }
         }
 
-        // Update GitContext for all files
-        // await tx.gitContext.updateMany({
-        //   where: { fileMeta: { projectId } },
-        //   data: { currentBranch: branchName },
-        // });
+        await prisma.project.update({
+          where: { id: projectId },
+          data: {
+            currentBranch: branchName,
+          },
+        });
       });
 
       console.log(`[GitController] Database synced for branch ${branchName}`);
@@ -653,15 +651,15 @@ export const switchBranch = asyncHandler(async (req, res) => {
       console.log(`[GitController] Redis shadow docs cleared`);
 
       // Step 9: Broadcast "project-reloaded"
-      const updatedFiles = await prisma.fileMeta.findMany({
-        where: { projectId, isDeleted: false },
-        select: { id: true, name: true, absolutePath: true, isFolder: true },
-      });
+      // const updatedFiles = await prisma.fileMeta.findMany({
+      //   where: { projectId, isDeleted: false },
+      //   select: { id: true, name: true, absolutePath: true, isFolder: true },
+      // });
 
       io.to(`project-${projectId}`).emit("project-reloaded", {
         projectId,
         branch: branchName,
-        files: updatedFiles,
+        // files: updatedFiles,
         message: `Successfully switched to ${branchName}`,
       });
 
@@ -691,38 +689,61 @@ export const switchBranch = asyncHandler(async (req, res) => {
 // ============================================================================
 
 /**
- * GET /api/git/:projectId/branches
+ * GET /api/git/:fileMetaId/branches
  * Fetch list of all branches from repository
  */
 export const getBranches = asyncHandler(async (req, res) => {
-  const redis = getRedisClient();
-  const io = getIO();
-  const { projectId } = req.params;
+  const { projectId } = req.params; // ✅ Ab ye asli projectId hai
 
   try {
+    // 1. Seedha Project fetch karo database se
     const project = await prisma.project.findUnique({
       where: { id: projectId },
     });
 
+    // Error handling agar project na mile
     if (!project) {
-      throw new AppError("Project not found", 404);
+      throw new AppError(
+        "Bhai, ye Project ID database mein exist nahi karti!",
+        404,
+      );
     }
 
     const repo = simpleGit(project.rootPath);
     const branchSummary = await repo.branch(["-a"]);
+    const activeBranch = branchSummary.current;
 
-    const branches = branchSummary.all.map((branch) => ({
-      name: branch.replace("remotes/origin/", ""),
-      isCurrent: branch === branchSummary.current,
-      isRemote: branch.startsWith("remotes/"),
-    }));
+    // 1. Set use karo unique names ke liye
+    const uniqueNames = new Set();
+
+    branchSummary.all.forEach((rawName) => {
+      // Naam saaf karo (prefix hatao)
+      const cleanName = rawName
+        .replace("remotes/origin/", "")
+        .replace("remotes/", "");
+      uniqueNames.add(cleanName);
+    });
+
+    // 2. Ab is Set se final array banao
+    const finalBranches = Array.from(uniqueNames).map((name) => {
+      return {
+        name: name,
+        isCurrent: name === activeBranch,
+        // Hum hamesha local ki tarah treat karenge kyunki checkout pe ye local ban jayegi
+        isRemote: false,
+      };
+    });
+
+    console.log(finalBranches);
 
     res.json({
       success: true,
       currentBranch: project.currentBranch,
-      branches,
+      gitCurrentBranch: activeBranch,
+      branches: finalBranches,
     });
   } catch (err) {
-    throw new AppError(`Failed to fetch branches: ${err.message}`, 500);
+    console.error(`[Git Error] fetch remote branches failed: ${err.message}`);
+    throw new AppError(`Failed to fetch remote branches: ${err.message}`, 500);
   }
 });

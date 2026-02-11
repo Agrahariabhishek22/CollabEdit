@@ -1,7 +1,7 @@
 import React from 'react';
 import FileTreeItem from './FileTreeItem';
 
-export default function FileTree({ items, selectedFile, onSelectFile, onFolderExpand, onContextMenu,onInviteClick }) {
+export default function FileTree({ items, selectedFile,setCurrentGitProject, onSelectFile, onFolderExpand, onContextMenu,onInviteClick }) {
   // Empty state handling
   if (!items || items.length === 0) {
     return (
@@ -21,6 +21,7 @@ export default function FileTree({ items, selectedFile, onSelectFile, onFolderEx
           item={item}
           level={0}
           selectedFile={selectedFile}
+          setCurrentGitProject={setCurrentGitProject}
           onSelectFile={onSelectFile}
           onFolderExpand={onFolderExpand}
           onContextMenu={onContextMenu}

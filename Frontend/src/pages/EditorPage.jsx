@@ -7,7 +7,12 @@ import { EditorProvider } from "../context/EditorContext";
 import EditorCore from "../components/Editor/EditorCore/EditorCore";
 import { ArrowLeft } from "lucide-react";
 
-export default function EditorPage({ selectedFile, projectId, isGitMode = false, onBack = null }) {
+export default function EditorPage({
+  selectedFile,
+  projectId,
+  isGitMode = false,
+  onBack = null,
+}) {
   const { socket } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,9 +24,15 @@ export default function EditorPage({ selectedFile, projectId, isGitMode = false,
 
   // 1. Handle File Connection (The Handshake)
   useEffect(() => {
+    console.log(selectedFile);
+
     if (!selectedFile?.id || !socket) return;
 
     setIsLoading(true);
+    const timeout = setTimeout(() => {
+    setIsLoading(false); 
+    console.warn("Socket response timed out, forcing editor to load");
+  }, 2000); // 2 seconds wait karo
 
     // Request to join the file room & rehydrate Shadow Doc
     socket.emit("file:join", {
@@ -74,10 +85,11 @@ export default function EditorPage({ selectedFile, projectId, isGitMode = false,
 
     // Cleanup: Jab file switch ho ya component unmount ho
     return () => {
+      clearTimeout(timeout);
       socket.emit("file:leave", { fileId: selectedFile.id });
       socket.off("file:joined");
       socket.off("file:join-error");
-      socket.off("user:joined");
+      socket.off("user:joined"); 
       socket.off("user:left");
     };
   }, [selectedFile?.id, socket, projectId]);
@@ -85,7 +97,14 @@ export default function EditorPage({ selectedFile, projectId, isGitMode = false,
   const handleChatToggle = useCallback(() => {
     setIsChatOpen((prev) => !prev);
   }, []);
-
+  console.log(
+    "Render Check -> isLoading:",
+    isLoading,
+    "selectedFile:",
+    !!selectedFile,
+    "initialBinary:",
+    !!initialBinary,
+  );
   return (
     <div className="flex flex-col h-full bg-slate-950">
       {/* Git Mode Back Button */}
@@ -120,7 +139,7 @@ export default function EditorPage({ selectedFile, projectId, isGitMode = false,
             ) : (
               // ✅ Context yahan initialize ho raha hai
               <EditorProvider
-              key={selectedFile.id}
+                key={selectedFile.id}
                 initialBinary={initialBinary}
                 socket={socket}
                 fileId={selectedFile.id}

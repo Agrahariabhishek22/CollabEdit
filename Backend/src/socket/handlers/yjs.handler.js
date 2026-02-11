@@ -127,7 +127,7 @@ class YjsHandler {
 
       // YJS decoding check
       if (binaryUpdate.length === 0) return;
-
+ 
       await this.yjsDocManager.applyDelta(fileId, binaryUpdate);
 
       // socket.to(...) ka matlab hai: "Bhejne waale ko chhod kar, room mein baki sabko bhejo"

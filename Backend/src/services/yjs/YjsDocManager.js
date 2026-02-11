@@ -2,6 +2,8 @@
 
 import * as Y from "yjs";
 import { Buffer } from "buffer";
+import pkg from "redis";
+const { commandOptions } = pkg;
 
 class YjsDocManager {
   constructor(redis, persistence) {
@@ -26,6 +28,7 @@ class YjsDocManager {
       if (this.activeDocs.has(fileId)) {
         console.log(`${logPrefix} 🚀 Cache Hit: Document found in RAM.`);
         const doc = this.activeDocs.get(fileId);
+        // console.log("[Yjs_manager] the yjs doc in RAM is ", doc);
         doc.lastActivity = Date.now();
         return doc;
       }
@@ -39,10 +42,16 @@ class YjsDocManager {
       // 2. Redis Fetch
       try {
         console.log(`${logPrefix} 📦 Attempting to load from Redis...`);
-        binary = await this.redis.sendCommand(["GET", `doc:binary:${fileId}`], {
-          returnBuffers: true,
-        });
+        binary = await this.redis.get(
+          commandOptions({ returnBuffers: true }),
+          `doc:binary:${fileId}`,
+        );
+
+        console.log("Redis se asli Buffer aaya:", Buffer.isBuffer(binary));
+        console.log("[Yjs Doc] Data coming from redis", binary);
+
         if (binary)
+          // console.log("Redis se asli Buffer aaya:", Buffer.isBuffer(binary)); // Ye true hona chahiye
           console.log(
             `${logPrefix} ✅ Found binary in Redis (Size: ${binary.length} bytes)`,
           );
@@ -57,6 +66,10 @@ class YjsDocManager {
             `${logPrefix} 📂 Redis empty, attempting to load .yjs from Disk...`,
           );
           binary = await this.persistence.loadBinaryFromDisk(fileId);
+          console.log("Disk yjs se asli Buffer aaya:", Buffer.isBuffer(binary));
+
+          // console.log("[Yjs Doc] Data coming from .yjs file", binary);
+
           if (binary) console.log(`${logPrefix} ✅ Found binary on Disk.`);
         } catch (diskErr) {
           console.error(
@@ -69,11 +82,9 @@ class YjsDocManager {
       // 4. Apply Updates or Load Raw Text
       if (binary) {
         try {
-          console.log(`${logPrefix} ⚙️ Applying binary update to Y.Doc..., size: ${binary.length} bytes, binary: ${binary}`);
-          // Y.applyUpdate(ydoc, new Uint8Array(binary));
-          // console.log(
-          //   `${logPrefix} ✨ Binary applied successfully. Current text length: ${ytext.toString().length}`,
-          // );
+          console.log(
+            `${logPrefix} ⚙️ Applying binary update to Y.Doc..., size: ${binary.length} bytes, binary: ${binary}`,
+          );
           try {
             const updateArray = new Uint8Array(binary);
             Y.applyUpdate(ydoc, updateArray);
@@ -97,9 +108,9 @@ class YjsDocManager {
                 `${logPrefix} ❌ Locha Mil Gaya! Binary mein "content" naam ki key hi nahi hai. Isliye ytext.toString() 0 aa raha hai.`,
               );
             }
-                      console.log(
-            `${logPrefix} ✨ Binary applied successfully. Current text length: ${ytext.toString().length}`,
-          );
+            console.log(
+              `${logPrefix} ✨ Binary applied successfully. Current text length: ${ytext.toString().length}`,
+            );
           } catch (err) {
             console.error("Binary inspect karne mein error:", err);
           }
@@ -140,7 +151,7 @@ class YjsDocManager {
         users: new Set(),
         flushPending: false,
       };
-      console.log(docData);
+      // console.log(docData);
 
       this.activeDocs.set(fileId, docData);
       console.log(`${logPrefix} 💾 Document stored in active RAM.`);
@@ -263,6 +274,7 @@ class YjsDocManager {
     if (!doc) return;
 
     const binary = Y.encodeStateAsUpdate(doc.ydoc);
+    console.log("[YjsDOC manager] backuptoredis ", binary);
 
     // ✅ node-redis v4 mein setEx syntax (Capital E)
     await this.redis.setEx(

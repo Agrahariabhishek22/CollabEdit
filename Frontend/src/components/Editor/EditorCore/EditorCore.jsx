@@ -6,11 +6,12 @@ import DisplayLayer from "./DisplayLayer";
 import InputLayer from "./InputLayer";
 import OverlayLayer from "./OverlayLayer";
 import { useEditor } from "../../../hooks/useEditor";
-import WidgetLayer from "./WidgetLayer";
+import WidgetLayer, { detectLanguage } from "./WidgetLayer";
+import { useTreeSitter } from "../../../hooks/useTreeSitter";
 
 export default function EditorCore({ selectedFile, accessMode }) {
   const { ydoc, ytext, awarenessStates, updateCursor, isReady } = useEditor();
-
+  const language = detectLanguage(selectedFile?.name);
   // ════════════════════════════════════════════════════════════
   // STATE
   // ════════════════════════════════════════════════════════════
@@ -19,17 +20,29 @@ export default function EditorCore({ selectedFile, accessMode }) {
   const [scrollTop, setScrollTop] = useState(0);
   const [scrollLeft, setScrollLeft] = useState(0); // ← NEW
   const [layerHeight, setLayerHeight] = useState(0);
+  const [lastEditParams, setLastEditParams] = useState(null);
 
   const scrollContainerRef = useRef(null);
   const inputLayerRef = useRef(null);
   const displayLayerRef = useRef(null);
   const gutterPanelRef = useRef(null);
   const overlayLayerRef = useRef(null);
+  const [treeData, setTreeData] = useState({
+    tree: null,
+    errors: [],
+    loading: true,
+  });
 
+  // 🟢 Ye function sirf tab chalega jab InputLayer ka parser kaam khatam karega
+  const handleTreeUpdate = useCallback((data) => {
+    setTreeData(data);
+  }, []);
   // ════════════════════════════════════════════════════════════
   // OBSERVER: Split into lines for Gutter & Display
   // ════════════════════════════════════════════════════════════
   useEffect(() => {
+    console.log(selectedFile);
+
     if (!isReady) return; // Hook ke andar condition lagao, hook ko skip mat karo
     const observer = () => {
       const content = ytext.toString();
@@ -82,25 +95,22 @@ export default function EditorCore({ selectedFile, accessMode }) {
 
   const handleInputChange = useCallback(
     (deltaOp) => {
+      // 🟢 editParams yahan receive hoga
       if (!deltaOp || !deltaOp.type) return;
 
       const { type, index } = deltaOp;
 
-      console.log(`[EditorCore] Applying ${type} delta at index ${index}`);
-
-      // 🟢 Transaction में apply करो
+      // 🟢 Existing Yjs Transaction (Logic preserved)
       ydoc.transact(() => {
         if (type === "delete") {
           const { length } = deltaOp;
           if (length > 0) {
             ytext.delete(index, length);
-            console.log(`[EditorCore] Deleted ${length} chars at ${index}`);
           }
         } else if (type === "insert") {
           const { text } = deltaOp;
           if (text && text.length > 0) {
             ytext.insert(index, text);
-            // console.log(`[EditorCore] Inserted "${text}" at ${index}`);
           }
         }
       });
@@ -160,7 +170,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
         textarea.setSelectionRange(newCursorPos, newCursorPos);
       });
     },
-    [handleInputChange,inputLayerRef],
+    [handleInputChange, inputLayerRef],
   );
 
   // ════════════════════════════════════════════════════════════
@@ -207,6 +217,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
             onChange={handleInputChange}
             onCursorChange={handleCursorChange}
             isReadOnly={isReadOnly}
+            onTreeUpdate={handleTreeUpdate} // Callback pass kiya
             scrollLeft={scrollLeft}
           />
           <OverlayLayer
@@ -217,14 +228,16 @@ export default function EditorCore({ selectedFile, accessMode }) {
             // currentUserId={currentUserId}
           />
           <WidgetLayer
-            content={ytext.toString()}
+            content={content}
             scrollTop={scrollTop}
             scrollLeft={scrollLeft}
-            cursorPosition={cursorPosition}
             inputLayerRef={inputLayerRef}
-            selectedFile={selectedFile}
             onDeltaInsert={handleDeltaInsert}
             onSmartIndent={handleSmartIndent}
+            tree={treeData.tree}
+            errors={treeData.errors}
+            loading={treeData.loading}
+            language={language}
           />
           {/* 4. GHOST DIV: Browser ko scrollbar dene ke liye majboor karega */}
           <div

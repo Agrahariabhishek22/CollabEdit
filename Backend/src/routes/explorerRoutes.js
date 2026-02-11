@@ -6,6 +6,7 @@ const router=express.Router();
 
 router.use(protect);
 
+// router.get("/tree/:projectId",)
 router.get("/tree",getExplorerRoot)
 router.get("/subtree/folder/:folderId",getFolderContents)
 

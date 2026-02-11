@@ -4,22 +4,30 @@ import React, { forwardRef, useRef, useEffect } from "react";
 
 const InputLayer = forwardRef(
   (
-    { content, onChange, onCursorChange, isReadOnly, scrollTop, scrollLeft },
+    { content, onChange, onCursorChange, isReadOnly,onTreeUpdate, language, scrollTop, scrollLeft },
     ref,
   ) => {
     const textareaRef = useRef(null);
     const lastContentRef = useRef(content);
+    const [editParams, setEditParams] = useState(null);
+    const { tree, errors, loading } = useTreeSitter(
+      content,
+      language,
+      editParams,
+    );
+
+    useEffect(() => {
+      if (onTreeUpdate) {
+        onTreeUpdate({ tree, errors, loading });
+      }
+    }, [tree, errors, loading, onTreeUpdate]);
 
     const lineCount = content ? content.split("\n").length : 1;
-    // console.log("lineCount:", lineCount);
-    
     const lineHeight = 24;
     const totalHeight = lineCount * lineHeight + 20;
 
-    // Sync content from Yjs (when remote updates come)
     useEffect(() => {
       if (!textareaRef.current) return;
-
       if (content !== lastContentRef.current) {
         const cursorPos = textareaRef.current.selectionStart;
         textareaRef.current.value = content;
@@ -29,19 +37,23 @@ const InputLayer = forwardRef(
       }
     }, [content]);
 
+    // 🟢 Helper to get Row/Column from index
+    const getPos = (text, offset) => {
+      const lines = text.substring(0, offset).split("\n");
+      return { row: lines.length - 1, column: lines[lines.length - 1].length };
+    };
+
     const handleChange = (e) => {
       const newContent = e.target.value;
       const oldContent = lastContentRef.current;
       const cursorPos = e.target.selectionStart;
 
-      // If content is same, nothing to do
       if (newContent === oldContent) {
         updateCursorPosition();
         return;
       }
 
-      // 🟢 CORRECT DIFFING ALGORITHM
-      // Step 1: Find where content diverges from start
+      // 🟢 DIFFING ALGORITHM
       let startIndex = 0;
       while (
         startIndex < oldContent.length &&
@@ -51,7 +63,6 @@ const InputLayer = forwardRef(
         startIndex++;
       }
 
-      // Step 2: Find where content diverges from end
       let endIndex = 0;
       while (
         endIndex < oldContent.length - startIndex &&
@@ -62,20 +73,27 @@ const InputLayer = forwardRef(
         endIndex++;
       }
 
-      // Step 3: Calculate what needs to be deleted
       const deleteLength = oldContent.length - startIndex - endIndex;
-
-      // Step 4: Calculate what needs to be inserted
       const insertedText = newContent.substring(
         startIndex,
         newContent.length - endIndex,
       );
 
-      // 🟢 SEND DELTA OPERATIONS
+      // 🟢 TREE-SITTER EDIT PARAMS CALCULATION
+      // Inhe generate karna incremental update ke liye zaroori hai
+      const editParams = {
+        startIndex,
+        oldEndIndex: startIndex + deleteLength,
+        newEndIndex: startIndex + insertedText.length,
+        startPosition: getPos(oldContent, startIndex),
+        oldEndPosition: getPos(oldContent, startIndex + deleteLength),
+        newEndPosition: getPos(newContent, startIndex + insertedText.length),
+      };
+      setEditParams(editParams);
+
+      // 🟢 SEND TO EDITOR CORE
+      // Hum dono bhej rahe hain: Yjs delta aur Tree-sitter params
       if (deleteLength > 0) {
-        // console.log(
-        //   `[InputLayer] DELETE at ${startIndex}, length: ${deleteLength}`,
-        // );
         onChange({
           type: "delete",
           index: startIndex,
@@ -84,9 +102,6 @@ const InputLayer = forwardRef(
       }
 
       if (insertedText.length > 0) {
-        // console.log(
-        //   `[InputLayer] INSERT at ${startIndex}, text: "${insertedText}"`,
-        // );
         onChange({
           type: "insert",
           index: startIndex,
@@ -94,11 +109,9 @@ const InputLayer = forwardRef(
         });
       }
 
-      // Update refs
       lastContentRef.current = newContent;
       updateCursorPosition();
 
-      // Restore cursor position
       requestAnimationFrame(() => {
         if (textareaRef.current) {
           textareaRef.current.setSelectionRange(cursorPos, cursorPos);
@@ -116,14 +129,10 @@ const InputLayer = forwardRef(
       const lines = textBeforeCursor.split("\n");
       const line = lines.length - 1;
       const column = lines[lines.length - 1].length;
-      // console.log("[Input layer update cursor position",line,column);
-      
       onCursorChange(line, column);
     };
 
-    const handleCursorEvent = () => {
-      updateCursorPosition();
-    };
+    const handleCursorEvent = () => updateCursorPosition();
 
     return (
       <textarea
@@ -145,7 +154,6 @@ const InputLayer = forwardRef(
           color: "transparent", // Transparent so only caret shows
           caretColor: "transparent",
           opacity: 1,
-          // backgroundColor: "black",
           zIndex: 2,
           overflow: "hidden",
           height: `${totalHeight}px`,

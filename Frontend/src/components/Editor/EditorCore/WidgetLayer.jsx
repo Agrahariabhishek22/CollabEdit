@@ -19,15 +19,16 @@ export default function WidgetLayer({
   selectedFile,
   onDeltaInsert,
   onSmartIndent,
+  tree,
+  errors,
+  loading,
+  language
 }) {
   // console.log(
   //   "[Widget layer]Scroll top and Scroll left",
   //   scrollTop,
   //   scrollLeft,
   // );
-
-  const language = detectLanguage(selectedFile?.name);
-  const { tree, errors, loading } = useTreeSitter(content, language);
   const { generateSuggestions } = useAutocomplete(
     content,
     tree,
@@ -93,7 +94,7 @@ export default function WidgetLayer({
     return () => {
       inputLayerRef.current?.removeEventListener("input", handleInput);
     };
-  }, [generateSuggestions, inputLayerRef, loading]); // Stale scrollTop/Left dependency ki zarurat nahi ab
+  }, [generateSuggestions, inputLayerRef, loading,tree]); // Stale scrollTop/Left dependency ki zarurat nahi ab
 
   // 🟢 Handle suggestion selection - SEND ONLY DELTA
   const handleSelectSuggestion = (suggestion) => {
@@ -123,21 +124,20 @@ export default function WidgetLayer({
 
   // 🟢 Handle special keys
   useEffect(() => {
-    if (!inputLayerRef?.current || loading) return;
+    if (!inputLayerRef?.current || loading || !tree) return;
 
     const handleKeyDown = (e) => {
       if (e.key === "Enter") {
-        // Enter press hone par agar dropdown khula hai toh smart indent ya select trigger ho sakta hai
-        // Filhaal smart indent logic:
         const textarea = e.target;
         const cursorPos = textarea.selectionStart;
+        
+        // Use tree to get smart indent
         const indent = getSmartIndent(cursorPos);
 
         if (onSmartIndent) {
           e.preventDefault();
           onSmartIndent(indent);
         }
-
         setDropdownVisible(false);
       }
     };
@@ -146,12 +146,12 @@ export default function WidgetLayer({
     return () => {
       inputLayerRef.current?.removeEventListener("keydown", handleKeyDown);
     };
-  }, [getSmartIndent, onSmartIndent, inputLayerRef, loading]);
+  }, [getSmartIndent, onSmartIndent, inputLayerRef, loading, tree]);
 
   if (loading) {
     return (
       <div className="absolute top-2 right-2 text-xs text-yellow-400 z-50">
-        ⏳ Initializing...
+        ⏳ Parsing...
       </div>
     );
   }
@@ -179,7 +179,7 @@ export default function WidgetLayer({
   );
 }
 
-function detectLanguage(filename) {
+export function detectLanguage(filename) {
   if (!filename) return "javascript";
   const ext = filename.split(".").pop()?.toLowerCase();
   const langMap = {

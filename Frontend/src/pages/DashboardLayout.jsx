@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Common/Sidebar";
-import EditorContainer from "../components/Common/EditorContainer";
 import ContextMenu from "../components/Common/ContextMenu";
 import HeaderStrip from "../components/Common/HeaderStrip";
 import InvitationModal from "../modals/InvitationModal";
@@ -17,16 +16,23 @@ export default function DashboardLayout() {
   const [unreadNotifs, setUnreadNotifs] = useState(3); // Example live sync state
   const [inviteResource, setInviteResource] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [userRole, setUserRole] = useState("VIEWER");
 
   const handleSidebarRefresh = () => {
     setRefreshTrigger((prev) => prev + 1); // Key change hote hi Sidebar remount/refetch karega
   };
-
+// EditorPage.jsx ke andar aisa kuch hona chahiye
+useEffect(() => {
+  if (selectedFile) {
+    // Fetch file content or update editor
+    console.log("Editor loading file:", selectedFile.name);
+  }
+}, [selectedFile]);
   // Sidebar se file select hone par logic
   const handleFileSelect = (file) => {
     setSelectedFile(file);
-    console.log("Selecting file" ,file);
-    
+    console.log("Selecting file", file);
+
     // Agar source GIT hai aur folder hai, toh GIT_WORKSPACE view dikhao
     if (file.sourceType === "GIT" && file.isFolder) {
       console.log("Switching to Git Workspace for folder:", file);
@@ -36,6 +42,12 @@ export default function DashboardLayout() {
       setActiveView("EDITOR");
     }
   };
+  useEffect(() => {
+    console.log("Current git project", currentGitProject);
+
+    setActiveView("GIT_WORKSPACE");
+    setUserRole(currentGitProject?.accessMode || "VIEWER");
+  }, [currentGitProject]);
 
   // When file is selected from GitWorkspace, open it in editor
   const handleOpenEditorFromGit = (file) => {
@@ -47,6 +59,9 @@ export default function DashboardLayout() {
   const handleBackToGitWorkspace = () => {
     setActiveView("GIT_WORKSPACE");
   };
+  // useEffect(()=>{
+  //   console.log("Selected git folder for workSpace:", currentGitProject);
+  // },[currentGitProject])
 
   return (
     <div className="bg-slate-950 text-slate-200 min-h-screen selection:bg-indigo-500/30 overflow-hidden">
@@ -66,6 +81,7 @@ export default function DashboardLayout() {
         >
           <Sidebar
             key={refreshTrigger} // ✅ Key change hone par Sidebar ka useEffect dobara chalega
+            setCurrentGitProject={setCurrentGitProject}
             onRefresh={handleSidebarRefresh}
             selectedFile={selectedFile}
             onSelectFile={handleFileSelect}
@@ -77,30 +93,35 @@ export default function DashboardLayout() {
           />
         </div>
 
-      {/* Editor or Git Workspace */}
-      <main className="flex-1 relative bg-slate-950">
-        {activeView === "GIT_WORKSPACE" && currentGitProject && (
-          <GitWorkspace
-            project={currentGitProject}
-            onBackToDashboard={() => setActiveView("EDITOR")}
-            onOpenEditor={handleOpenEditorFromGit}
-          />
-        )}
-        {activeView === "GIT_EDITOR" && (
-          <EditorPage
-            selectedFile={selectedFile}
-            projectId={selectedFile?.projectId || null}
-            isGitMode={true}
-            onBack={handleBackToGitWorkspace}
-          />
-        )}
-        {activeView === "EDITOR" &&selectedFile (
-          <EditorPage
-            selectedFile={selectedFile}
-            projectId={selectedFile?.projectId || null}
-          />
-        )}
-      </main>
+        {/* Editor or Git Workspace */}
+        <main className="flex-1 relative bg-slate-950">
+          {/* Logic: Jab activeView EDITOR ho AUR selectedFile exist kare tabhi Editor kholo */}
+          {activeView === "EDITOR" && selectedFile && !selectedFile.isFolder ? (
+            <EditorPage
+              selectedFile={selectedFile}
+              projectId={selectedFile?.projectId || null}
+            />
+          ) : activeView === "GIT_WORKSPACE" && currentGitProject ? (
+            <GitWorkspace
+              project={currentGitProject}
+              onBackToDashboard={() => setActiveView("EDITOR")}
+              onOpenEditor={handleOpenEditorFromGit}
+              userRole={userRole}
+            />
+          ) : activeView === "GIT_EDITOR" ? (
+            <EditorPage
+              selectedFile={selectedFile}
+              projectId={selectedFile?.projectId || null}
+              isGitMode={true}
+              onBack={handleBackToGitWorkspace}
+            />
+          ) : (
+            /* Default screen jab kuch select na ho */
+            <div className="flex items-center justify-center h-full text-slate-500">
+              Select a file to start editing
+            </div>
+          )}
+        </main>
       </div>
 
       {/* 3. Global Context Menu Portal */}

@@ -3,14 +3,14 @@
 import React, { useEffect, useState } from "react";
 
 const USER_COLORS = [
-  "#FF6B6B",
-  "#4ECDC4",
-  "#45B7D1",
-  "#FFA07A",
-  "#98D8C8",
-  "#F7DC6F",
-  "#BB8FCE",
-  "#85C1E2",
+  "#E06C75", // Muted Soft Red (Chalky red, eyes par heavy nahi padta)
+  "#98C379", // Sage Green (Classic dark mode green)
+  "#61AFEF", // Steel Blue (Vibrant but professional)
+  "#D19A66", // Soft Orange/Amber (Warm tone)
+  "#56B6C2", // Deep Cyan/Teal (Oceanic feel)
+  "#C678DD", // Soft Purple (Orchid style)
+  "#E5C07B", // Muted Gold/Yellow (Warning/Highlight tone)
+  "#4DB6AC", // Cool Pine (Alternative green/teal)
 ];
 
 const CHAR_WIDTH = 8.43;    // ← OverlayLayer जैसा

@@ -37,7 +37,7 @@ import { apiLimiter } from "./src/middlewares/rateLimiter.js";
 import authRoutes from "./src/routes/auth.js";
 import projectRoutes from "./src/routes/projects.js";
 import fileRoutes from "./src/routes/files.js";
-import gitRoutes from "./src/routes/git.js";
+import gitRoutes from "./src/routes/gitRoutes.js";
 import inviteRoutes from "./src/routes/inviteRoute.js";
 import explorerRoutes from "./src/routes/explorerRoutes.js";
 import notificationRoutes from "./src/routes/notificationRoutes.js";

@@ -21,6 +21,7 @@ import { useRef } from "react";
 
 export default function Sidebar({
   selectedFile,
+  setCurrentGitProject,
   onSelectFile,
   onContextMenu,
   onInviteClick,
@@ -126,12 +127,7 @@ export default function Sidebar({
     return getFilteredTree(tabFiltered, searchQuery);
   }, [files, activeTab, searchQuery]);
 
-  const handleFolderExpand = async (folder) => {
-    const folderId = folder.id;
-
-    // --- YAHAN CHANGE HAI ---
-    // Folder select karne par bhi state update ho jaye
-    onSelectFile(folder);
+  const handleFolderExpand = async (folderId) => {
     try {
       const res = await axios.get(
         `http://localhost:3000/api/explorer/subtree/folder/${folderId}`,
@@ -297,6 +293,7 @@ export default function Sidebar({
         ) : (
           <FileTree
             items={displayedFiles} // Filtered and Tab-sorted data sent here
+            setCurrentGitProject={setCurrentGitProject}
             selectedFile={selectedFile}
             onSelectFile={onSelectFile}
             onFolderExpand={handleFolderExpand}

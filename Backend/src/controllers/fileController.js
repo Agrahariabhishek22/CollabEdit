@@ -127,11 +127,18 @@ export const createFileOrFolder = asyncHandler(async (req, res) => {
     });
 
     projectId = newProject.id;
-    const projectRoot = path.join(process.env.STORAGE_PATH, projectId);
+    const finalFileName = name;
 
+    const projectFolder = path.join(process.env.STORAGE_PATH, projectId);
+
+    const projectRoot = path.join(
+      process.env.STORAGE_PATH,
+      projectId,
+      finalFileName,
+    );
     // 2. Physical Disk Creation
-    if (!fs.existsSync(projectRoot)) {
-      await fsPromises.mkdir(projectRoot, { recursive: true });
+    if (!fs.existsSync(projectFolder)) {
+      await fsPromises.mkdir(projectFolder, { recursive: true });
     }
     // 3. Create the Root FileMeta (The 'Jadd' of the project)
     fileMeta = await prisma.fileMeta.create({
@@ -152,14 +159,13 @@ export const createFileOrFolder = asyncHandler(async (req, res) => {
       where: { id: projectId },
       data: {
         rootFileMetaId: fileMeta.id,
-        rootPath: projectRoot,
+        rootPath: projectFolder,
       },
     });
 
     // Optional: Agar user root level par hi content bhej raha hai (rare but possible)
-    if (!isFolder && content) {
-      const filePath = path.join(projectRoot, name);
-      await fsPromises.writeFile(filePath, content, "utf-8");
+    if (!isFolder) {
+      await fsPromises.writeFile(projectRoot, content, "utf-8");
     }
   }
   // --- CASE 2: EXISTING PROJECT (parentFileMetaId exists) ---
@@ -424,6 +430,3 @@ export const deleteFileOrFolder = asyncHandler(async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-
-

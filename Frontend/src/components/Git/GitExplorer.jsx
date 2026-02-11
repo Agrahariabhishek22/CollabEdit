@@ -6,6 +6,7 @@ import {
   Loader2,
   Home,
 } from "lucide-react";
+import CollaboratorBadge from "./CollaboratorBadge";
 
 export default function GitExplorer({
   files,
@@ -15,6 +16,7 @@ export default function GitExplorer({
   onBreadcrumbClick,
   onFileClick,
   isLoading,
+  collaborators = {}, // Map of fileId -> array of collaborators
 }) {
   // Generate breadcrumb items from pathStack
   const getBreadcrumbs = () => {
@@ -86,7 +88,7 @@ export default function GitExplorer({
           </div>
         ) : (
           <div className="divide-y divide-slate-800/30">
-            {/* Folders First */}
+            {/* Folders */}
             {files
               .filter((f) => f.isFolder)
               .map((file) => (
@@ -99,10 +101,15 @@ export default function GitExplorer({
                   <span className="text-sm text-slate-300 group-hover:text-slate-100 transition-colors flex-1 truncate">
                     {file.name}
                   </span>
-                  <ChevronRight
-                    size={14}
-                    className="text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                  />
+                  <div className="flex items-center gap-2">
+                    {collaborators[file.id] && (
+                      <CollaboratorBadge collaborators={collaborators[file.id]} />
+                    )}
+                    <ChevronRight
+                      size={14}
+                      className="text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                    />
+                  </div>
                 </div>
               ))}
 
@@ -127,9 +134,14 @@ export default function GitExplorer({
                   <span className="text-sm text-slate-300 group-hover:text-slate-100 transition-colors flex-1 truncate">
                     {file.name}
                   </span>
-                  <span className="text-xs text-slate-600 group-hover:text-slate-400 transition-colors flex-shrink-0">
-                    {file.name.split(".").pop()?.toUpperCase()}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {collaborators[file.id] && (
+                      <CollaboratorBadge collaborators={collaborators[file.id]} />
+                    )}
+                    <span className="text-xs text-slate-600 group-hover:text-slate-400 transition-colors flex-shrink-0">
+                      {file.name.split(".").pop()?.toUpperCase()}
+                    </span>
+                  </div>
                 </div>
               ))}
           </div>
