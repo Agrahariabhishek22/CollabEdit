@@ -169,7 +169,7 @@ export default class SessionManager {
     return participants;
   }
 
-  async updateCursorPosition(fileId, userId,userName,userEmail, cursor) {
+  async updateCursorPosition(fileId, userId, userName, userEmail, cursor) {
     const data = await this.redis.hGet(`file_session:${fileId}`, userId);
     if (data) {
       const participant = JSON.parse(data);
@@ -181,12 +181,16 @@ export default class SessionManager {
         userId,
         JSON.stringify(participant),
       );
-console.log("[Session Manager update cursor pos] Updated File_sessionnow emiting",cursor);
+      console.log(
+        "[Session Manager update cursor pos] Updated File_sessionnow emiting",
+        cursor,
+      );
 
       // Broadcast to others (throttled at socket level)
       this.io.to(`file:${fileId}`).emit("cursor:update", {
         userId,
-        userName,userEmail,
+        userName,
+        userEmail,
         cursor,
       });
     }

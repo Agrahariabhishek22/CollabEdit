@@ -1,21 +1,29 @@
-// components/Editor/EditorCore/InputLayer.jsx
+// DELTA: InputLayer.jsx - Auto-Closing Integration
 
 import React, { forwardRef, useRef, useEffect } from "react";
 import { useState } from "react";
 import { useTreeSitter } from "../../../hooks/useTreeSitter";
+import { useAutoClosing } from "../../../hooks/useAutoClosing"; // ✅ NEW IMPORT
 
 const InputLayer = forwardRef(
   (
-    { content, onChange, onCursorChange, isReadOnly,onTreeUpdate, language, scrollTop, scrollLeft },
-    ref,
+    { content, onChange, onCursorChange, isReadOnly, onTreeUpdate, language },
+    ref
   ) => {
     const textareaRef = useRef(null);
     const lastContentRef = useRef(content);
     const [editParams, setEditParams] = useState(null);
+    
     const { tree, errors, loading } = useTreeSitter(
       content,
       language,
-      editParams,
+      editParams
+    );
+
+    // ✅ DELTA 1: Add auto-closing hook
+    const { handleAutoClosing, insertAutoClosingPair } = useAutoClosing(
+      tree,
+      content
     );
 
     useEffect(() => {
@@ -45,6 +53,9 @@ const InputLayer = forwardRef(
       return { row: lines.length - 1, column: lines[lines.length - 1].length };
     };
 
+    // ============================================================================
+    // DELTA 2: Updated handleChange with auto-closing
+    // ============================================================================
     const handleChange = (e) => {
       const newContent = e.target.value;
       const oldContent = lastContentRef.current;
@@ -55,7 +66,7 @@ const InputLayer = forwardRef(
         return;
       }
 
-      // 🟢 DIFFING ALGORITHM
+      // 🟢 DIFFING ALGORITHM (Same as before)
       let startIndex = 0;
       while (
         startIndex < oldContent.length &&
@@ -78,11 +89,40 @@ const InputLayer = forwardRef(
       const deleteLength = oldContent.length - startIndex - endIndex;
       const insertedText = newContent.substring(
         startIndex,
-        newContent.length - endIndex,
+        newContent.length - endIndex
       );
 
-      // 🟢 TREE-SITTER EDIT PARAMS CALCULATION
-      // Inhe generate karna incremental update ke liye zaroori hai
+      // ✅ DELTA 3: Check if last character is an opening pair
+      const lastChar = insertedText[insertedText.length - 1];
+      let autoCloseDeltas = [];
+
+      if (insertedText.length === 1 && lastChar) {
+        // ✅ Single character insertion - check for auto-closing
+        const closingInfo = handleAutoClosing(lastChar, cursorPos, 0, 0);
+
+        if (closingInfo) {
+          console.log(`[AutoClose] Triggered for "${lastChar}"`);
+
+          // ✅ Determine if we should add newline
+          const shouldAddNewline =
+            lastChar === "{" &&
+            (newContent[cursorPos] === "" ||
+              newContent[cursorPos] === "\n" ||
+              newContent[cursorPos] === "}");
+
+          // Get deltas for auto-closing insertion
+          autoCloseDeltas = insertAutoClosingPair(
+            lastChar,
+            closingInfo.closingChar,
+            cursorPos,
+            shouldAddNewline
+          );
+
+          console.log(`[AutoClose] Generated ${autoCloseDeltas.length} deltas`);
+        }
+      }
+
+      // 🟢 TREE-SITTER EDIT PARAMS (Same as before)
       const editParams = {
         startIndex,
         oldEndIndex: startIndex + deleteLength,
@@ -93,8 +133,7 @@ const InputLayer = forwardRef(
       };
       setEditParams(editParams);
 
-      // 🟢 SEND TO EDITOR CORE
-      // Hum dono bhej rahe hain: Yjs delta aur Tree-sitter params
+      // 🟢 SEND TO EDITOR CORE (Same as before)
       if (deleteLength > 0) {
         onChange({
           type: "delete",
@@ -111,12 +150,27 @@ const InputLayer = forwardRef(
         });
       }
 
+      // ✅ DELTA 4: Send auto-closing deltas
+      // These are sent AFTER the main insert
+      autoCloseDeltas.forEach((delta) => {
+        console.log(
+          `[AutoClose] Sending delta: insert "${delta.text}" at ${delta.index}`
+        );
+        onChange(delta);
+      });
+
       lastContentRef.current = newContent;
       updateCursorPosition();
 
       requestAnimationFrame(() => {
         if (textareaRef.current) {
-          textareaRef.current.setSelectionRange(cursorPos, cursorPos);
+          // ✅ DELTA 5: Adjust cursor position if auto-close added text
+          let finalCursorPos = cursorPos;
+          if (autoCloseDeltas.length > 0) {
+            // Cursor stays where user typed, before closing pair
+            finalCursorPos = cursorPos;
+          }
+          textareaRef.current.setSelectionRange(finalCursorPos, finalCursorPos);
         }
       });
     };
@@ -126,7 +180,7 @@ const InputLayer = forwardRef(
       const cursorOffset = textareaRef.current.selectionStart;
       const textBeforeCursor = textareaRef.current.value.substring(
         0,
-        cursorOffset,
+        cursorOffset
       );
       const lines = textBeforeCursor.split("\n");
       const line = lines.length - 1;
@@ -153,13 +207,12 @@ const InputLayer = forwardRef(
           boxSizing: "border-box",
           WebkitFontSmoothing: "antialiased",
           textRendering: "optimizeLegibility",
-          color: "transparent", // Transparent so only caret shows
-          caretColor: "transparent",
+          color: "transparent",
+          caretColor: "white",
           opacity: 1,
           zIndex: 2,
           overflow: "hidden",
           height: `${totalHeight}px`,
-          transform: `translateY(-${scrollTop || 0}px) translateX(-${scrollLeft || 0}px)`,
           willChange: "transform",
           transition: "none",
           top: 0,
@@ -182,7 +235,7 @@ const InputLayer = forwardRef(
         wrap="off"
       />
     );
-  },
+  }
 );
 
 InputLayer.displayName = "InputLayer";

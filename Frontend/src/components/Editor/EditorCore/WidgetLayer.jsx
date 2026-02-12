@@ -1,11 +1,12 @@
-// components/Editor/WidgetLayer/index.jsx
+// DELTA: components/Editor/WidgetLayer/index.jsx
+// Keep existing logic, just update autocomplete hook integration
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import {
   useTreeSitter,
   getIndentLevelAtCursor,
 } from "../../../hooks/useTreeSitter";
-import { useAutocomplete } from "../../../hooks/useAutoComplete";
+import { useAutocomplete } from "../../../hooks/useAutocomplete"; // ✅ Updated import
 import { useSmartIndent } from "../../../hooks/useSmartIndent";
 import SuggestionDropdown from "./WidgetLayer/SuggestionDropdown";
 import SyntaxErrorWidget from "./WidgetLayer/SyntaxErrorWidget";
@@ -22,19 +23,24 @@ export default function WidgetLayer({
   tree,
   errors,
   loading,
-  language
+  language,
 }) {
-  // console.log(
-  //   "[Widget layer]Scroll top and Scroll left",
-  //   scrollTop,
-  //   scrollLeft,
-  // );
+  // ============================================================================
+  // DELTA 1: Update useAutocomplete hook call
+  // ============================================================================
+
+  const validCursorIndex =
+    cursorPosition && typeof cursorPosition === "number"
+      ? Math.max(0, Math.min(cursorPosition, content.length - 1))
+      : 0;
+
   const { generateSuggestions } = useAutocomplete(
     content,
     tree,
-    null,
+    validCursorIndex, // ✅ Pass valid cursor index
     language,
   );
+
   const { getSmartIndent } = useSmartIndent(tree, content);
 
   const [dropdownVisible, setDropdownVisible] = useState(false);
@@ -43,7 +49,9 @@ export default function WidgetLayer({
   const [currentPrefix, setCurrentPrefix] = useState("");
   const [prefixStartIndex, setPrefixStartIndex] = useState(0);
 
-  // 🟢 Monitor input for autocomplete trigger
+  // ============================================================================
+  // DELTA 2: Update input handler - use new hook's generateSuggestions
+  // ============================================================================
   useEffect(() => {
     if (!inputLayerRef?.current || loading) return;
 
@@ -51,7 +59,6 @@ export default function WidgetLayer({
       const textarea = e.target;
       const cursorPos = textarea.selectionStart;
 
-      // 🛠️ FIX: Live DOM values uthao taaki stale props ka issue na ho
       const liveScrollLeft = textarea.scrollLeft;
       const liveScrollTop = textarea.scrollTop;
 
@@ -63,24 +70,19 @@ export default function WidgetLayer({
       const prefix = wordMatch ? wordMatch[1] : "";
 
       if (prefix.length > 1) {
-        // Calculate logic for prefix start
         const lineStart = textBeforeCursor.length - currentLine.length;
         const prefixStart = lineStart + (currentLine.length - prefix.length);
 
         setCurrentPrefix(prefix);
         setPrefixStartIndex(prefixStart);
 
-        // Suggestions generate karo
+        // ✅ DELTA: Call new generateSuggestions with proper params
+        // New hook returns objects with: { text, score, category, context }
         const sug = generateSuggestions(prefix, cursorPos);
-        setSuggestions(sug);
+        setSuggestions(sug); // Already returns array of suggestion objects
 
-        // POSITIONING LOGIC
         const charIndex = currentLine.length - prefix.length;
-
-        // x calculation: Char width * index + padding - LIVE scroll
         const x = charIndex * 8.43 + 10 - liveScrollLeft;
-
-        // y calculation: Line number * height + padding + height - LIVE scroll
         const y = (lines.length - 1) * 24 + 10 + 24 - liveScrollTop;
 
         setDropdownPosition({ x, y });
@@ -94,22 +96,25 @@ export default function WidgetLayer({
     return () => {
       inputLayerRef.current?.removeEventListener("input", handleInput);
     };
-  }, [generateSuggestions, inputLayerRef, loading,tree]); // Stale scrollTop/Left dependency ki zarurat nahi ab
+  }, [generateSuggestions, inputLayerRef, loading, tree]); // ✅ tree dependency added
 
-  // 🟢 Handle suggestion selection - SEND ONLY DELTA
+  // ============================================================================
+  // DELTA 3: Handle suggestion selection - same logic, works with new hook
+  // ============================================================================
   const handleSelectSuggestion = (suggestion) => {
     if (!onDeltaInsert) return;
 
-    console.log(
-      `[WidgetLayer] Selected: "${suggestion.text}" to replace prefix "${currentPrefix}"`,
-    );
-
+    // ✅ New hook returns suggestion.text directly
     const textToInsert = suggestion.text.substring(currentPrefix.length);
 
     if (textToInsert.length === 0) {
       setDropdownVisible(false);
       return;
     }
+
+    console.log(
+      `[WidgetLayer] Selected: "${suggestion.text}" (${suggestion.category}) to replace prefix "${currentPrefix}"`,
+    );
 
     onDeltaInsert({
       type: "insert",
@@ -122,7 +127,9 @@ export default function WidgetLayer({
     setPrefixStartIndex(0);
   };
 
-  // 🟢 Handle special keys
+  // ============================================================================
+  // DELTA 4: Handle Enter key - same logic
+  // ============================================================================
   useEffect(() => {
     if (!inputLayerRef?.current || loading || !tree) return;
 
@@ -130,8 +137,7 @@ export default function WidgetLayer({
       if (e.key === "Enter") {
         const textarea = e.target;
         const cursorPos = textarea.selectionStart;
-        
-        // Use tree to get smart indent
+
         const indent = getSmartIndent(cursorPos);
 
         if (onSmartIndent) {
@@ -146,7 +152,7 @@ export default function WidgetLayer({
     return () => {
       inputLayerRef.current?.removeEventListener("keydown", handleKeyDown);
     };
-  }, [getSmartIndent, onSmartIndent, inputLayerRef, loading, tree]);
+}, [inputLayerRef, loading, tree]);
 
   if (loading) {
     return (

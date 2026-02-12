@@ -1,44 +1,81 @@
-// hooks/useSmartIndent.js
+// hooks/useSmartIndent.js - FIXED VERSION
 
 import { useCallback } from "react";
 
 const TAB_SIZE = 2; // 2 spaces per indent level
 
+/**
+ * Smart Indentation Hook
+ *
+ * Features:
+ * - Detects if cursor is inside block (class, function, if, etc)
+ * - Returns proper indent level for Enter key
+ * - Handles nested blocks correctly
+ * - Works across all languages
+ */
 export function useSmartIndent(tree, content) {
-  // 🟢 Calculate indent on Enter key
-
+  // ============================================================================
+  // Main function: Get proper indent for current line
+  // ============================================================================
   const getSmartIndent = useCallback(
     (cursorIndex) => {
-      if (!tree) return "";
-      console.log("Seeing the content",tree ,content);
-      
-      // Find cursor's position in content
-      const beforeCursor = content.substring(0, cursorIndex);
-      const lines = beforeCursor.split("\n");
-      const currentLine = lines[lines.length - 1];
-      console.log("[SmartIndentHook] Current line before cursor:", currentLine);
+      if (!tree || cursorIndex === undefined) {
+        return ""; // No indent if no tree or invalid cursor
+      }
 
-      // Get indent level at cursor
-      const indentLevel = getIndentLevelAtCursor(tree, cursorIndex);
-      const baseIndent = " ".repeat(indentLevel * TAB_SIZE);
-      console.log("[SmartIndentHook] this is the indent level foe your enter ",indentLevel);
-      
-      // Check if we're opening a block (need extra indent)
-      // const trimmed = currentLine.trim();
-      // if (
-      //   trimmed.endsWith("{") ||
-      //   trimmed.endsWith("[") ||
-      //   trimmed.endsWith("(")
-      // ) {
-      //   return baseIndent + " ".repeat(TAB_SIZE);
-      // }
+      // ✅ FIX 1: Validate cursor index
+      const validCursorIndex = Math.max(
+        0,
+        Math.min(cursorIndex, content.length - 1),
+      );
 
-      return baseIndent;
+      console.log(
+        `[SmartIndent] Cursor at ${validCursorIndex}, Content length: ${content.length}`,
+      );
+
+      // ✅ FIX 2: Get the node at cursor position
+      const nodeAtCursor = tree.rootNode.descendantForIndex(
+        validCursorIndex,
+        validCursorIndex,
+      );
+
+      if (!nodeAtCursor) {
+        console.warn("[SmartIndent] No node found at cursor");
+        return "";
+      }
+
+      console.log(
+        `[SmartIndent] Node at cursor: ${nodeAtCursor.type} (${nodeAtCursor.startIndex}-${nodeAtCursor.endIndex})`,
+      );
+      console.log(nodeAtCursor);
+
+      // ✅ FIX 3: Walk up the tree to find block context
+      const indentLevel = calculateIndentLevel(nodeAtCursor);
+
+      console.log(`[SmartIndent] Calculated indent level: ${indentLevel}`);
+
+      // ✅ FIX 4: Check if we need EXTRA indent (opening block)
+      const extraIndent = shouldAddExtraIndent(
+        nodeAtCursor,
+        validCursorIndex,
+        content,
+      );
+
+      const totalIndent = indentLevel + (extraIndent ? 1 : 0);
+      const indentStr = " ".repeat(totalIndent * TAB_SIZE);
+
+      console.log(
+        `[SmartIndent] Total indent: ${totalIndent} levels = "${indentStr}"`,
+      );
+
+      return indentStr;
     },
     [tree, content],
   );
 
-  // 🟢 Handle Tab key for indentation
+  // ============================================================================
+  // Handle Tab key for manual indentation
+  // ============================================================================
   const insertTab = useCallback((cursorIndex, isShiftTab = false) => {
     const indentStr = " ".repeat(isShiftTab ? -TAB_SIZE : TAB_SIZE);
     return indentStr;
@@ -47,59 +84,143 @@ export function useSmartIndent(tree, content) {
   return { getSmartIndent, insertTab };
 }
 
-function getIndentLevelAtCursor(tree, cursorIndex) {
-  let depth = 0;
-  let node = tree.rootNode;
+// ============================================================================
+// HELPER 1: Calculate indent level by walking up tree
+// ============================================================================
+/**
+ * Walk up from current node and count block levels
+ * Each block (class, function, if, etc) adds 1 indent level
+ */
+function calculateIndentLevel(node) {
+  let indentLevel = 0;
+  let currentNode = node;
+  // console.log(node.text);
 
-  function traverse(n) {
-    if (n.startIndex < cursorIndex && cursorIndex <= n.endIndex) {
-      
-      // Sirf wahi nodes jo actual "Visual Block" banate hain
-      const blockLikeNodes = [
-        "statement_block", "compound_statement", "block",
-        "class_body", "switch_body", "object", "array", 
-        "list_literal", "dictionary"
-      ];
+  // ✅ FIX: Walk up the tree, not down
+  while (currentNode) {
+    const isBlockNode = isBlockLikeNode(currentNode.type);
 
-      // 🟢 Logic: Hum sirf tabhi depth badhayenge jab hum block ke START ke baad hon
-      // Isse 'try {' ke turant baad Enter maarne par sahi position milegi.
-      if (blockLikeNodes.includes(n.type)) {
-        depth++;
-      }
+    console.log(
+      `[CalcIndent] Checking: ${currentNode.type}, isBlock: ${isBlockNode}`,
+    );
 
-      for (let i = 0; i < n.childCount; i++) {
-        traverse(n.child(i));
-      }
+    if (isBlockNode) {
+      indentLevel++;
     }
+
+    currentNode = currentNode.parent;
   }
 
-  traverse(node);
-  return depth;
+  return indentLevel;
 }
 
-const indentTypes = [
-  // Blocks (JS, Java, C++)
-  "statement_block",
-  "compound_statement",
-  "block",
-  // Functions & Classes
-  "function_definition",
-  "method_declaration",
-  "class_definition",
-  "class_body",
-  // Control Flow
-  "if_statement",
-  "for_statement",
-  "while_statement",
-  "do_statement",
-  "switch_statement",
-  // Data Structures (Agar Enter mara toh indent hona chahiye)
-  "object",
-  "dictionary",
-  "array",
-  "list_literal",
-  "parenthesized_expression",
-  // Java/C++ specific
-  "constructor_declaration",
-  "finally_clause",
-];
+// ============================================================================
+// HELPER 2: Check if node is a block-like node
+// ============================================================================
+function isBlockLikeNode(nodeType) {
+  const blockNodes = new Set([
+    // ==========================================
+    // 1. PURE CONTAINERS (Structural Blocks)
+    // ==========================================
+    "statement_block", // JS, C++, Java, Go
+    "compound_statement", // C, C++, Python
+    "class_body", // JS, Java, C++
+    "interface_body", // TS, Java
+    "object", // JS Object literals
+    "array", // JS/Go Arrays
+    "list_literal", // Python Lists
+    "dictionary", // Python Dicts
+    "switch_statement", // Sab languages ke liye
+    "case_clause", // Indent inside cases
+    "catch_clause",
+    "finally_clause",
+
+    // ==========================================
+    // 2. LANGUAGE SPECIFIC WRAPPERS (Careful here!)
+    // ==========================================
+    // Note: JS mein 'arrow_function' ko hata diya hai kyunki
+    // uske andar 'statement_block' count ho jayega.
+
+    // "function_definition", // Python (Python has no { }, so this is the block)
+    // "if_statement", // Python (Indentation based)
+    // "for_statement", // Python
+    // "while_statement", // Python
+    // "try_statement", // Python
+
+    // "program" aur "arrow_function" ko list se nikaal diya hai
+    // taaki "Double Counting" na ho.
+  ]);
+
+  return blockNodes.has(nodeType);
+}
+// ============================================================================
+// HELPER 3: Check if we should add EXTRA indent
+// ============================================================================
+/**
+ * Determines if we should add extra indent
+ *
+ * Cases where we add extra indent:
+ * 1. Cursor is right after opening brace/bracket/paren: { [ (
+ * 2. Line ends with opening character
+ * 3. Inside empty block
+
+ * Get the indentation of the current line
+ * Useful for matching indentation when no block is involved
+ */
+
+function shouldAddExtraIndent(node, cursorIndex, content) {
+  if (cursorIndex === 0) return false;
+
+  const beforeCursor = content.substring(0, cursorIndex);
+  const trimmedBefore = beforeCursor.trimEnd();
+
+  // 1. Language Agnostic Opening Brackets
+  const openingChars = ["{", "[", "("];
+
+  // 2. Python Specific: Check for colon (:) at the end of line
+  // Robust check: ensure it's not a ternary or object property
+  const isPythonStyleBlock = trimmedBefore.endsWith(":");
+
+  if (
+    openingChars.some((char) => trimmedBefore.endsWith(char)) ||
+    isPythonStyleBlock
+  ) {
+    // --- CRITICAL FIX FOR DOUBLE COUNTING ---
+    // Agar AST ne pehle hi is block ko detect kar liya hai,
+    // toh manual indent skip karna chahiye.
+
+    const nodeType = node?.type || "";
+    const redundantNodes = [
+      "statement_block",
+      "object",
+      "array",
+      "compound_statement",
+    ];
+
+    if (redundantNodes.includes(nodeType)) {
+      console.log(
+        `[ExtraIndent] Skipping manual indent: AST node '${nodeType}' already handled it.`,
+      );
+      return false;
+    }
+
+    console.log(
+      "[ExtraIndent] Adding indent based on trailing char:",
+      trimmedBefore.slice(-1),
+    );
+    return true;
+  }
+
+  return false;
+}
+// ============================================================================
+// DEBUG: Log node hierarchy
+// ============================================================================
+export function debugNodeHierarchy(node, depth = 0) {
+  const indent = "  ".repeat(depth);
+  console.log(`${indent}${node.type} (${node.startIndex}-${node.endIndex})`);
+
+  for (let i = 0; i < node.childCount; i++) {
+    debugNodeHierarchy(node.child(i), depth + 1);
+  }
+}

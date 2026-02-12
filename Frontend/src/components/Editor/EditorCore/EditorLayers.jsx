@@ -1,5 +1,5 @@
 import React from "react";
-import DisplayLayer from "./DisplayLayer";
+import DisplayLayer from "./DisplayLayerDup";
 import InputLayer from "./InputLayer";
 import OverlayLayer from "./OverlayLayer";
 import WidgetLayer from "./WidgetLayer";

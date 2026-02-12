@@ -116,14 +116,14 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
   // 4. AWARENESS: Collaborative cursors
   // ════════════════════════════════════════════════════════════
   const CURSOR_COLORS = [
-    "#FF5733",
-    "#33FF57",
-    "#3357FF",
-    "#F333FF",
-    "#FFB833",
-    "#33FFF3",
-    "#FF3380",
-    "#8C33FF",
+    "#E06C75", // Muted Soft Red (Chalky red, eyes par heavy nahi padta)
+    "#98C379", // Sage Green (Classic dark mode green)
+    "#61AFEF", // Steel Blue (Vibrant but professional)
+    "#D19A66", // Soft Orange/Amber (Warm tone)
+    "#56B6C2", // Deep Cyan/Teal (Oceanic feel)
+    "#C678DD", // Soft Purple (Orchid style)
+    "#E5C07B", // Muted Gold/Yellow (Warning/Highlight tone)
+    "#4DB6AC", // Cool Pine (Alternative green/teal)
   ];
   // Helper: UserId se consistently ek hi color nikalne ke liye
   const getColorForUser = (userId) => {

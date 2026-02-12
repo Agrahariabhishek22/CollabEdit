@@ -44,19 +44,35 @@ export default function AutocompleteDropdown({
   const y = cursorPosition.line * LINE_HEIGHT - scrollTop + LINE_HEIGHT + 5;
 
   // Scroll selected item into view
-  useEffect(() => {
-    if (selectedIndex >= 0 && dropdownRef.current) {
-      const itemElement = dropdownRef.current.querySelector(
-        `[data-index="${selectedIndex}"]`
-      );
-      if (itemElement) {
-        itemElement.scrollIntoView({
-          block: "nearest",
-          behavior: "smooth",
+useEffect(() => {
+  if (selectedIndex >= 0 && dropdownRef.current) {
+    const container = dropdownRef.current;
+    // selected item ko dhoondo
+    const itemElement = container.querySelector(`[data-index="${selectedIndex}"]`);
+
+    if (itemElement) {
+      const containerHeight = container.clientHeight; // Dropdown ki height (200px)
+      const scrollTop = container.scrollTop; // Kitna scroll ho chuka hai
+      const itemTop = itemElement.offsetTop; // Item kahan hai container ke top se
+      const itemHeight = itemElement.offsetHeight; // Item ki apni height
+
+      // Case 1: Agar selection screen ke neeche ja raha hai
+      if (itemTop + itemHeight > scrollTop + containerHeight) {
+        container.scrollTo({
+          top: itemTop + itemHeight - containerHeight,
+          behavior: "smooth"
+        });
+      }
+      // Case 2: Agar selection screen ke upar ja raha hai (Arrow Up)
+      else if (itemTop < scrollTop) {
+        container.scrollTo({
+          top: itemTop,
+          behavior: "smooth"
         });
       }
     }
-  }, [selectedIndex]);
+  }
+}, [selectedIndex]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

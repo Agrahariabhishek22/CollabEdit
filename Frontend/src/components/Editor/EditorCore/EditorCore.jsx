@@ -156,19 +156,36 @@ export default function EditorCore({ selectedFile, accessMode }) {
       const textarea = inputLayerRef.current;
       if (!textarea) return;
 
-      const cursorPos = textarea.selectionStart;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const value = textarea.value;
 
+      // 1. Naya text create karo (Jo line insert karni hai)
+      const textToInsert = "\n" + indent;
+
+      // 2. State update karo (Handle input change ko poora text bhej rahe ho ya partial?)
+      // Agar tumhara function pura value update karta hai:
       handleInputChange({
         type: "insert",
-        index: cursorPos,
-        text: "\n" + indent,
+        index: start,
+        text: textToInsert,
       });
 
-      // 🟢 Move cursor to end of indent
-      const newCursorPos = cursorPos + 1 + indent.length;
-      requestAnimationFrame(() => {
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-      });
+      // 3. Cursor position logic:
+      // Naya index = jahan cursor tha + pichla enter + jitne spaces aaye
+      const targetPos = start + textToInsert.length;
+
+      // Use setTimeout(0) or requestAnimationFrame - but with a small check
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(targetPos, targetPos);
+
+        // Bonus: Scroll adjustment taaki cursor screen ke bahar na jaye
+        const lineHeight = 24; // Adjust according to your CSS
+        const currentLine = value.substr(0, start).split("\n").length;
+        textarea.scrollTop =
+          currentLine * lineHeight - textarea.clientHeight / 2;
+      }, 0);
     },
     [handleInputChange, inputLayerRef],
   );
@@ -199,7 +216,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
       >
         {/* 2. GUTTER AREA: Left side fixed width */}
         <div className="w-12 sticky left-0 z-30 bg-slate-900 border-r border-slate-800">
-          <GutterPanel ref={gutterPanelRef} lines={lines} />
+          <GutterPanel ref={gutterPanelRef} lines={lines} errors={treeData.errors} />
         </div>
 
         {/* 3. EDITOR CONTENT AREA: Right side bacha hua space */}
@@ -218,7 +235,6 @@ export default function EditorCore({ selectedFile, accessMode }) {
             onCursorChange={handleCursorChange}
             isReadOnly={isReadOnly}
             onTreeUpdate={handleTreeUpdate} // Callback pass kiya
-            scrollLeft={scrollLeft}
           />
           <OverlayLayer
             scrollTop={scrollTop}

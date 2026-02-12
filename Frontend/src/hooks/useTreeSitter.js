@@ -1,7 +1,78 @@
 import { useEffect, useRef, useState } from "react";
-import TreeSitterManager from "./TreeSitterManager";
+import { findSyntaxErrors } from "./ErrorDetection";
+// import * as Parser from "web-tree-sitter";
 
-export function useTreeSitter(content, language = "javascript",editData=null) {
+let parserInstance = null;
+let languages = {};
+
+// 🟢 Language configurations
+const LANGUAGE_URLS = {
+  javascript:
+    "https://cdn.jsdelivr.net/npm/tree-sitter-javascript@0.20.3/tree-sitter-javascript.wasm",
+  typescript:
+    "https://cdn.jsdelivr.net/npm/tree-sitter-typescript@0.20.8/tree-sitter-typescript.wasm",
+  cpp: "https://cdn.jsdelivr.net/npm/tree-sitter-cpp@0.20.8/tree-sitter-cpp.wasm",
+  java: "https://cdn.jsdelivr.net/npm/tree-sitter-java@0.20.2/tree-sitter-java.wasm",
+  jsx: "https://cdn.jsdelivr.net/npm/tree-sitter-javascript@0.20.3/tree-sitter-javascript.wasm",
+  tsx: "https://cdn.jsdelivr.net/npm/tree-sitter-typescript@0.20.8/tree-sitter-typescript.wasm",
+  python:
+    "https://cdn.jsdelivr.net/npm/tree-sitter-python@0.20.4/tree-sitter-python.wasm",
+};
+
+// 🟢 Initialize parser once globally
+const initializeParser = async () => {
+  if (parserInstance) return parserInstance;
+
+  try {
+    console.log("[Tree-sitter] Initializing engine...");
+
+    const TS = window.TreeSitter; // index.html wala script
+    if (!TS) throw new Error("TreeSitter global not found!");
+
+    // Engine init
+    await TS.init({
+      locateFile: (scriptName) =>
+        `https://cdn.jsdelivr.net/npm/web-tree-sitter@0.20.8/${scriptName}`,
+    });
+
+    parserInstance = new TS();
+    console.log("[Tree-sitter] Engine Ready ✅");
+    return parserInstance;
+  } catch (err) {
+    console.error("[Tree-sitter] Init Error:", err);
+    throw err;
+  }
+};
+
+// 🟢 Load language grammar (Corrected version)
+const loadLanguage = async (language) => {
+  if (languages[language]) return languages[language];
+
+  const TS = window.TreeSitter; // Dubara window se hi uthao static methods ke liye
+
+  try {
+    const url = LANGUAGE_URLS[language];
+    if (!url) throw new Error(`Language "${language}" not supported`);
+
+    console.log(`[Tree-sitter] Fetching ${language} WASM...`);
+
+    // ✅ Seedha TS.Language.load use karo, manually WebAssembly instantiate karne ki zaroorat nahi hai
+    // Ye Tree-sitter ka built-in method hai jo zyada stable hai
+    const lang = await TS.Language.load(url);
+
+    languages[language] = lang;
+    return lang;
+  } catch (err) {
+    console.error(`[Tree-sitter] Failed to load ${language}:`, err);
+    throw err;
+  }
+};
+
+export function useTreeSitter(
+  content,
+  language = "javascript",
+  editData = null,
+) {
   const [tree, setTree] = useState(null);
   const [errors, setErrors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,8 +87,9 @@ export function useTreeSitter(content, language = "javascript",editData=null) {
     const setup = async () => {
       setLoading(true);
       try {
-        const parser = await TreeSitterManager.getParser();
-        const lang = await TreeSitterManager.loadLanguage(language);
+        // ✅ Local functions use kiye (TreeSitterManager ki jagah)
+        const parser = await initializeParser();
+        const lang = await loadLanguage(language);
 
         if (mounted) {
           parser.setLanguage(lang);
@@ -38,68 +110,89 @@ export function useTreeSitter(content, language = "javascript",editData=null) {
     return () => {
       mounted = false;
     };
-  }, [language]);
+  }, [language]); // Jab language change hogi, tabhi setup dobara chalega
 
-  // 🟢 Phase 2: Live Parsing (Incremental Soon)
-  // useTreeSitter.js ke andar live parsing wala useEffect update karo
-
+  // 🟢 Phase 2: Live Parsing (Incremental + Error Detection)
   useEffect(() => {
+    // Parser ready nahi hai ya loading ho rahi hai toh ruko
     if (loading || !parserRef.current) return;
 
     const currentContent = content || "";
-    if (currentContent === lastContentRef.current) return;
+
+    // Agar content change nahi hua aur editData bhi nahi hai toh skip
+    if (currentContent === lastContentRef.current && !editData) return;
 
     let newTree;
 
-    // 🟢 AGAR HUMARE PAAS EDIT DATA HAI (Incremental Parse)
-    if (tree && editData) {
-      // editData editor se aayega: {startIndex, oldEndIndex, newEndIndex, ...}
-      tree.edit(editData);
-      newTree = parserRef.current.parse(currentContent, tree); // Purane tree ko base banakar parse karega
-    } else {
-      // 🟡 Initial parse ya full re-parse
-      newTree = parserRef.current.parse(currentContent);
+    try {
+      // 🟢 INCREMENTAL PARSE: Agar purana tree aur editData (indices) available hain
+      if (tree && editData) {
+        // tree.edit method purane tree ko modify karta hai mapping ke liye
+        tree.edit(editData);
+        // parser.parse(content, oldTree) incremental parsing trigger karta hai
+        newTree = parserRef.current.parse(currentContent, tree);
+      } else {
+        // 🟡 FULL RE-PARSE: Initial load ya editData missing hone par
+        newTree = parserRef.current.parse(currentContent);
+      }
+
+      // Syntax errors calculate karo
+      const syntaxErrors = findSyntaxErrors(newTree, currentContent);
+
+      // Refs aur State update karo
+      lastContentRef.current = currentContent;
+      setTree(newTree);
+      setErrors(syntaxErrors);
+    } catch (err) {
+      console.error("[useTreeSitter] Parsing Error:", err);
     }
-
-    const syntaxErrors = findSyntaxErrors(newTree, currentContent);
-
-    lastContentRef.current = currentContent;
-    setTree(newTree);
-    setErrors(syntaxErrors);
-  }, [content, loading, editData]); // editData ek naya prop hoga
+  }, [content, loading, editData]);
 
   return { tree, errors, loading };
 }
 
-// 🟢 Syntax Error Finder (Pure Function)
-function findSyntaxErrors(tree, content) {
-  const errors = [];
-  const cursor = tree.walk();
-  let reachedEnd = false;
+// 🟢 Find syntax errors in AST
+// function findSyntaxErrors(tree, content) {
+//   const errors = [];
+//   const cursor = tree.walk(); // 🟢 Tree-sitter ka official cursor
 
-  while (!reachedEnd) {
-    const node = cursor.currentNode();
-    if (node.type === "ERROR" || node.isMissing()) {
-      errors.push({
-        message: node.isMissing() ? `Missing: ${node.type}` : "Syntax Error",
-        line: node.startPosition.row,
-        column: node.startPosition.column,
-        startIndex: node.startIndex,
-        endIndex: node.endIndex,
-      });
-    }
+//   let reachedEnd = false;
+//   while (!reachedEnd) {
+//     const node = cursor.currentNode();
 
-    if (cursor.gotoFirstChild()) continue;
-    while (!cursor.gotoNextSibling()) {
-      if (!cursor.gotoParent()) {
-        reachedEnd = true;
-        break;
-      }
-    }
-  }
-  return errors;
-}
+//     // 🔴 Agar node ERROR hai ya MISSING hai (jaise bracket bhool gaye)
+//     if (node.type === "ERROR" || node.isMissing()) {
+//       const { startPosition, endPosition } = node;
 
+//       errors.push({
+//         type: "syntax_error",
+//         message: node.isMissing()
+//           ? `Missing: "${node.type}"`
+//           : `Unexpected token: "${content.substring(node.startIndex, node.endIndex).substring(0, 20)}"`,
+//         line: startPosition.row,
+//         column: startPosition.column,
+//         endLine: endPosition.row,
+//         endColumn: endPosition.column,
+//         startIndex: node.startIndex,
+//         endIndex: node.endIndex,
+//       });
+//     }
+
+//     // 🟡 Tree mein aage badhne ka logic
+//     if (cursor.gotoFirstChild()) {
+//       continue;
+//     }
+
+//     while (!cursor.gotoNextSibling()) {
+//       if (!cursor.gotoParent()) {
+//         reachedEnd = true;
+//         break;
+//       }
+//     }
+//   }
+
+//   return errors;
+// }
 // 🟢 Get indent level at cursor
 export function getIndentLevelAtCursor(tree, cursorIndex) {
   if (!tree) return 0;

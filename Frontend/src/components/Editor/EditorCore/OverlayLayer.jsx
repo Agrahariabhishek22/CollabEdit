@@ -31,8 +31,8 @@ export default function OverlayLayer({
       <CollaborativeCursors
         awarenessStates={awarenessStates}
         // currentUserId={currentUserId}
-        scrollTop={scrollTop}
-        scrollLeft={scrollLeft}
+        // scrollTop={scrollTop}
+        // scrollLeft={scrollLeft}
       />
 
       {/* Future के लिए baki components */}

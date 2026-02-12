@@ -105,6 +105,9 @@ const App = (() => {
             if (e.key === 'Enter') addTask(elements.taskInput.value);
         });
     };
+     const toggleTask =()=>{
+  
+     }
 
     // Exporting methods for global access (for onclick)
     return { init, deleteTask, toggleTask };
@@ -130,4 +133,14 @@ function printHelloWorld(){
 }
   
 function greeting(){
-console.log("helo buddy how r u i am very fine how r u 
+console.log("helo buddy how r u i am very fine how r u ");
+  }
+  
+console.log("");
+if(a===b){
+  console.log("hello world");
+}
+  
+
+
+

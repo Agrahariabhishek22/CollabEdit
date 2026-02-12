@@ -1,34 +1,40 @@
-// utils/treeSitterHighlighter.js
-
-export function highlightCodeWithTreeSitter(content, tree, language = "javascript") {
-  if (!tree || !content) return content;
+export function highlightCodeWithTreeSitterInRange(content, tree, language, rangeStart, rangeEnd) {
+  if (!tree || !content) return [];
 
   const colors = getLanguageColors(language);
   const highlights = [];
-
-  // 🟢 Walk through tree और सब nodes को highlight करो
   const cursor = tree.walk();
-  let reachedEnd = false;
 
+  let reachedEnd = false;
   while (!reachedEnd) {
     const node = cursor.currentNode();
 
-    // 🟢 Node type के basis पर color decide करो
-    const color = colors[node.type];
-
-    if (color) {
-      highlights.push({
-        startIndex: node.startIndex,
-        endIndex: node.endIndex,
-        type: node.type,
-        color: color,
-      });
-    }
-
-    if (cursor.gotoFirstChild()) {
+    // 🟢 Optimization 1: Agar node viewport ke niche nikal gaya, toh poora subtree skip karo
+    if (node.startIndex >= rangeEnd) {
+      if (!cursor.gotoNextSibling()) {
+        if (!cursor.gotoParent()) { reachedEnd = true; break; }
+      }
       continue;
     }
 
+    // 🟢 Optimization 2: Agar node range ke andar hai, tabhi process karo
+    if (node.endIndex > rangeStart) {
+      const color = colors[node.type];
+      
+      // Node valid hai aur uska color defined hai
+      if (color && node.startIndex < node.endIndex) {
+        highlights.push({
+          startIndex: node.startIndex,
+          endIndex: node.endIndex,
+          type: node.type,
+          color: color,
+        });
+      }
+    }
+
+    // Depth-first traversal: Har node ko check karte hue chalo
+    if (cursor.gotoFirstChild()) continue;
+    
     while (!cursor.gotoNextSibling()) {
       if (!cursor.gotoParent()) {
         reachedEnd = true;
@@ -37,12 +43,54 @@ export function highlightCodeWithTreeSitter(content, tree, language = "javascrip
     }
   }
 
-  // 🟢 Sort by startIndex ताकि overlapping न हो
-  highlights.sort((a, b) => a.startIndex - b.startIndex);
-
-  return highlights;
+  // 🟢 Robust Sorting: Primary sort startIndex par, secondary endIndex par (Nested support)
+  return highlights.sort((a, b) => (a.startIndex - b.startIndex) || (b.endIndex - a.endIndex));
 }
 
+/**
+ * Robust HTML Generation: Overlapping aur Nested nodes ko handle karta hai.
+ * Ye ensure karta hai ki koi bhi character miss na ho aur HTML valid rahe.
+ */
+export function applyHighlights(content, highlights) {
+  if (!highlights || highlights.length === 0) return escapeHtml(content);
+
+  let html = "";
+  let lastIndex = 0;
+console.log(highlights);
+
+  // Filter overlapping: Tree-sitter kabhi-kabhi same range ke multi-nodes deta hai
+  // Hum sirf sabse specific (ya sabse upar wala) uthayenge
+  const cleanHighlights = [];
+  for (const h of highlights) {
+    if (h.startIndex >= lastIndex) {
+      cleanHighlights.push(h);
+      // Ensure overlaps don't break the string flow
+      // Note: Advanced logic for nested spans can be added here
+    }
+  }
+
+  cleanHighlights.forEach(({ startIndex, endIndex, color }) => {
+    // 1. Highlight se pehle ka normal text
+    if (startIndex > lastIndex) {
+      html += escapeHtml(content.substring(lastIndex, startIndex));
+    }
+
+    // 2. Highlighted text with color
+    const text = content.substring(startIndex, endIndex);
+    if (text.length > 0) {
+      html += `<span style="color: ${color};">${escapeHtml(text)}</span>`;
+    }
+
+    lastIndex = Math.max(lastIndex, endIndex);
+  });
+
+  // 3. Bacha hua text after all highlights
+  if (lastIndex < content.length) {
+    html += escapeHtml(content.substring(lastIndex));
+  }
+
+  return html;
+}
 // 🟢 Language-specific color mapping
 function getLanguageColors(language) {
   const baseColors = {
@@ -101,30 +149,6 @@ function getLanguageColors(language) {
   }
 
   return baseColors;
-}
-
-// 🟢 Convert highlights to HTML spans
-export function applyHighlights(content, highlights) {
-  if (highlights.length === 0) return escapeHtml(content);
-
-  let html = "";
-  let lastIndex = 0;
-
-  highlights.forEach(({ startIndex, endIndex, color }) => {
-    // Add text before this highlight
-    html += escapeHtml(content.substring(lastIndex, startIndex));
-
-    // Add highlighted text
-    const text = content.substring(startIndex, endIndex);
-    html += `<span style="color: ${color};">${escapeHtml(text)}</span>`;
-
-    lastIndex = endIndex;
-  });
-
-  // Add remaining text
-  html += escapeHtml(content.substring(lastIndex));
-
-  return html;
 }
 
 const escapeHtml = (str) =>
