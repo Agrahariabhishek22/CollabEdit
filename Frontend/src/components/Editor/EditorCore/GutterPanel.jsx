@@ -33,7 +33,7 @@ const GutterPanel = forwardRef(({ lines, scrollTop, errors }, ref) => {
     if (error.severity === "error") {
       return "bg-red-900/30 text-red-400 border-r-2 border-red-500/50";
     }
-    if (error.severity === "warning") {
+    if (error.severity === "warning"||error.type === "info") {
       return "bg-amber-900/20 text-amber-400/80 border-r-2 border-amber-500/40";
     }
     return "text-slate-600";

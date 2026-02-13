@@ -163,7 +163,7 @@ export default function WidgetLayer({
   }
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-40">
+    <div className="absolute inset-0 pointer-events-none z-40 ">
       <div className="pointer-events-auto">
         <SuggestionDropdown
           suggestions={suggestions}

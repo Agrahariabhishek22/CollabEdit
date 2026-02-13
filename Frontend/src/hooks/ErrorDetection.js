@@ -50,7 +50,7 @@ function findTreeErrors(tree, content) {
       const errorText = content
         .substring(node.startIndex, node.endIndex)
         .substring(0, 100);
-        inspectNode(node)
+        // inspectNode(node)
       errors.push({
         type: "syntax_error",
         severity: "error",

@@ -13,19 +13,19 @@ const USER_COLORS = [
   "#4DB6AC", // Cool Pine (Alternative green/teal)
 ];
 
-const CHAR_WIDTH = 8.43;    // ← OverlayLayer जैसा
-const LINE_HEIGHT = 24;     // ← OverlayLayer जैसा
-const PADDING_OFFSET = 10;  // ← OverlayLayer जैसा
+const CHAR_WIDTH = 8.43; // ← OverlayLayer जैसा
+const LINE_HEIGHT = 24; // ← OverlayLayer जैसा
+const PADDING_OFFSET = 10; // ← OverlayLayer जैसा
 
 export default function CollaborativeCursors({
   awarenessStates,
-  currentUserId,
   scrollTop,
   scrollLeft,
 }) {
   if (!awarenessStates || awarenessStates.length === 0) {
     return null;
   }
+  const currentUserId = JSON.parse(localStorage.getItem("user"))?.id || null;
 
   return (
     <>
@@ -33,7 +33,7 @@ export default function CollaborativeCursors({
         const { userId, userName, cursor, color = "#FF6B6B" } = state;
 
         // Current user का cursor skip कर
-        // if (!cursor || userId === currentUserId) return null;
+        if (!cursor || userId === currentUserId) return null;
 
         // Position calculation - OverlayLayer जैसा
         const x = cursor.column * CHAR_WIDTH + PADDING_OFFSET;

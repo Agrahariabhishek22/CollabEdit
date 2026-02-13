@@ -6,14 +6,13 @@ import { setSession, deleteSession, blacklistToken } from "../config/redis.js";
 import { config } from "../config/env.js";
 import { AppError, asyncHandler } from "../middlewares/errorHandler.js";
 
-
 // Pehle: const generateToken = (id) => ...
 // Ab: Aise likho
 export const generateToken = (payload) => {
   return jwt.sign(
     payload, // Ab isme id, name, email teeno honge
     config.JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: "7d" },
   );
 };
 
@@ -42,10 +41,18 @@ export const signup = asyncHandler(async (req, res) => {
     select: { id: true, name: true, email: true }, // Password return nahi karna
   });
 
-  const token = generateToken({ id: user.id, name: user.name, email: user.email });
+  const token = generateToken({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+  });
 
   // Redis Session
-  await setSession(user.id, { userId: user.id, email: user.email, loginAt: new Date() });
+  await setSession(user.id, {
+    userId: user.id,
+    email: user.email,
+    loginAt: new Date(),
+  });
 
   res.cookie("token", token, {
     httpOnly: true,
@@ -53,7 +60,7 @@ export const signup = asyncHandler(async (req, res) => {
     maxAge: 7 * 24 * 60 * 60 * 1000,
     sameSite: "lax",
   });
-console.log(user,token);
+  console.log(user, token);
 
   return res.status(201).json({
     success: true,
@@ -83,9 +90,17 @@ export const login = asyncHandler(async (req, res) => {
     throw new AppError("Email ya Password galat hai", 401);
   }
 
-  const token = generateToken({ id: user.id, name: user.name, email: user.email });
+  const token = generateToken({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+  });
 
-  await setSession(user.id, { userId: user.id, email: user.email, loginAt: new Date() });
+  await setSession(user.id, {
+    userId: user.id,
+    email: user.email,
+    loginAt: new Date(),
+  });
 
   res.cookie("token", token, {
     httpOnly: true,
@@ -101,7 +116,7 @@ export const login = asyncHandler(async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email },
       token,
     },
-  }); 
+  });
 });
 
 // Logout Controller

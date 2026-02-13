@@ -140,16 +140,26 @@ export const EditorProvider = ({ children, initialBinary, socket, fileId }) => {
     if (!socket) return;
 
     const handleCursorUpdate = ({ userId, userName, cursor }) => {
-      // 1. Agar data valid nahi hai toh skip karo
-      if (!userId || !cursor) return;
+      // 1. Agar userId missing hai toh skip karo
+      if (!userId) return;
 
+      // 🟢 2. Cleanup Logic: Agar cursor null hai, toh user ko remove karo aur aage mat badho
+      if (cursor === null) {
+        setAwarenessStates((prev) => prev.filter((u) => u.userId !== userId));
+        console.log(
+          `[Cursor Update] Removed user ${userId} because cursor is null`,
+        );
+        return; // 👈 Yahan se return hona zaroori hai
+      }
+
+      // 3. Normal Logic: Agar cursor valid hai, toh existing user ko update/add karo
       const userColor = getColorForUser(userId);
 
       setAwarenessStates((prev) => {
-        // 2. Purani state mein se is specific user ko dhoondo aur hatao (Filter)
+        // Purani state mein se is specific user ko hatao taaki duplicate na ho
         const otherUsers = prev.filter((u) => u.userId !== userId);
 
-        // 3. Naya data add kar do
+        // Naya data add kar do
         return [
           ...otherUsers,
           {

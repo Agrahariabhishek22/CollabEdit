@@ -22,9 +22,9 @@ class FileConnectionHandler {
     });
 
     // File leave (User closes file)
-    // socket.on("file:leave", async (data) => {
-    //   await this.handleFileLeave(socket, data);
-    // });
+    socket.on("file:leave", async (data) => {
+      await this.handleFileLeave(socket, data);
+    });
 
     // // Cursor update (Real-time cursor position)
     socket.on("cursor:update", async (data) => {
@@ -33,7 +33,7 @@ class FileConnectionHandler {
   }
 
   async handleFileJoin(socket, { fileId, projectId }) {
-    const { userId, userName, tabId } = socket;
+    const { userId, userName, tabId ,userEmail} = socket;
 
     try {
       // 1. Permission Check (Intact)
@@ -66,6 +66,8 @@ class FileConnectionHandler {
         fileId,
         userId,
         tabId,
+        userName,
+        userEmail,
         validation.mode,
       );
       socket.join(`file:${fileId}`);
@@ -98,21 +100,21 @@ class FileConnectionHandler {
     }
   }
 
-//   async handleFileLeave(socket, { fileId }) {
-//     const { userId, tabId } = socket;
+  async handleFileLeave(socket, { fileId }) {
+    const { userId, tabId } = socket;
 
-//     try {
-//       await this.sessionManager.leaveFileSession(fileId, userId, tabId);
-//       socket.leave(`file:${fileId}`);
-//       socket.currentFileId = null;
+    try {
+      await this.sessionManager.leaveFileSession(fileId, userId, tabId);
+      socket.leave(`file:${fileId}`);
+      socket.currentFileId = null;
 
-//       socket.emit("file:left", { fileId });
+      socket.emit("file:left", { fileId });
 
-//       console.log(`[File] User ${userId} left ${fileId}`);
-//     } catch (err) {
-//       console.error("[File Leave] Error:", err);
-//     }
-//   } 
+      console.log(`[File] User ${userId} left ${fileId}`);
+    } catch (err) {
+      console.error("[File Leave] Error:", err);
+    }
+  } 
 
   async handleCursorUpdate(socket, { fileId, cursor }) {
     const { userId,userName,userEmail } = socket;

@@ -212,7 +212,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
         ref={scrollContainerRef}
         className="flex-1 relative overflow-auto flex flex-row "
         onScroll={handleScroll}
-        style={{ height: "100%" }}
+        // style={{ height: "100%" }}
       >
         {/* 2. GUTTER AREA: Left side fixed width */}
         <div className="w-12 sticky left-0 z-30 bg-slate-900 border-r border-slate-800">
@@ -227,6 +227,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
             selectedFile={selectedFile}
             scrollTop={scrollTop}
             scrollLeft={scrollLeft}
+            errors={treeData.errors}
           />
           <InputLayer
             ref={inputLayerRef}
@@ -261,7 +262,7 @@ export default function EditorCore({ selectedFile, accessMode }) {
               height: `${lines.length * 24}px`,
               width: "1000px", // ← CHANGE: "2000px" se "100%" kar de
             }}
-          />{" "}
+          />
         </div>
       </div>
     </div>

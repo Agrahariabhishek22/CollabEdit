@@ -30,9 +30,9 @@ export default function EditorPage({
 
     setIsLoading(true);
     const timeout = setTimeout(() => {
-    setIsLoading(false); 
-    console.warn("Socket response timed out, forcing editor to load");
-  }, 2000); // 2 seconds wait karo
+      setIsLoading(false);
+      console.warn("Socket response timed out, forcing editor to load");
+    }, 2000); // 2 seconds wait karo
 
     // Request to join the file room & rehydrate Shadow Doc
     socket.emit("file:join", {
@@ -66,17 +66,21 @@ export default function EditorPage({
 
     // 2. Presence Listeners: Jab naya banda join kare
     socket.on("user:joined", ({ user }) => {
+      console.log("New participant joined:", user);
       setParticipants((prev) => {
         // Array of objects mein filter/find kaam karega
         const exists = prev.find((p) => p.userId === user.userId);
         if (exists) return prev;
         return [...prev, user];
       });
+      console.log(user);
+
       toast(`${user.userName} joined`, { icon: "👋" });
     });
 
     // 3. Presence Listeners: Jab koi left kare
     socket.on("user:left", ({ userId }) => {
+      console.log("Participant left:", userId);
       setParticipants((prev) => {
         // Ab ye array hai, toh .filter makkhan chalega!
         return prev.filter((p) => p.userId !== userId);
@@ -89,7 +93,7 @@ export default function EditorPage({
       socket.emit("file:leave", { fileId: selectedFile.id });
       socket.off("file:joined");
       socket.off("file:join-error");
-      socket.off("user:joined"); 
+      socket.off("user:joined");
       socket.off("user:left");
     };
   }, [selectedFile?.id, socket, projectId]);
@@ -121,13 +125,13 @@ export default function EditorPage({
       )}
 
       {/* Editor Header: Ab participants bhi dikhayega (Avatars) */}
-      {/* <EditorHeader
+      <EditorHeader
         selectedFile={selectedFile}
         participants={participants}
         accessMode={accessMode}
-        onChatToggle={handleChatToggle}
-        isChatOpen={isChatOpen}
-      /> */}
+        // onChatToggle={handleChatToggle}
+        // isChatOpen={isChatOpen}
+      />
 
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 flex flex-col overflow-hidden">

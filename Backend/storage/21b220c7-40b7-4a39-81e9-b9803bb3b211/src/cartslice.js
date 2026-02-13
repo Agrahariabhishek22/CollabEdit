@@ -44,6 +44,12 @@ const customerSlice = createSlice({
     }
   },
 });
-
-export const { loginSuccess, logoutSuccess, setLoading, setError,updateAddress,addAddress } = customerSlice.actions;
+hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+dsfjsdfhhhugfygyutydyfgsdytfgtyyftyttwettrttertewttrytwetrewtrewtrywetyrewtrtft
+nbghfdgfgdfgfgdffgfgfgfgfgdfgdfgdgfgdgdgdgfgexportjednfdfdfdfsdfdfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+ const { loginSuccess, logoutSuccess, setLoading, setError,updateAddress,addAddress } = customerSlice.actions;
 export default customerSlice.reducer;
+dghbhgbhbhfghbhbhghgbhggsfdgdffgfggdgffgfggfggfgfgfgggdgfgfgdgffdgdgfgfg
+
+
+hrheujruheurhuehurheuhjsjfhkdhfffffffffffffffffffffffffffffffffffffffffffdddddddddddddddddddddddddddddddddddddhfsdghfgsdkhsdufhusdf

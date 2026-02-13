@@ -102,9 +102,18 @@ export default class SessionManager {
   // FILE SESSION (Active File Tracking)
   // ═══════════════════════════════════════════════════════════
 
-  async joinFileSession(fileId, userId, tabId, accessMode) {
+  async joinFileSession(
+    fileId,
+    userId,
+    tabId,
+    userName,
+    userEmail,
+    accessMode,
+  ) {
     const participant = {
       userId,
+      userName,
+      userEmail,
       tabId,
       accessMode, // 'ADMIN' | 'EDITOR' | 'VIEWER'
       joinedAt: Date.now(),
@@ -137,24 +146,35 @@ export default class SessionManager {
     return participant;
   }
 
-  async leaveFileSession(fileId, userId, tabId) {
-    // Remove from file session
+async leaveFileSession(fileId, userId, tabId) {
+    // 🟢 1. Pehle cursor ko null bhej kar broadcast karo
+    // Hum updateCursorPosition call karenge taaki baaki sabka UI saaf ho jaye
+    // Note: Humein user ki info Redis se nikalni hogi broadcast ke liye
+    const userData = await this.redis.hGet(`file_session:${fileId}`, userId);
+    if (userData) {
+      const p = JSON.parse(userData);
+      // Cursor null bhej rahe hain taaki frontend user marker remove karde
+      await this.updateCursorPosition(fileId, userId, p.userName, p.userEmail, null);
+    }
+
+    // 🟢 2. Ab session data remove karo Redis se
     await this.redis.hDel(`file_session:${fileId}`, userId);
 
-    // Clear active file tracker
+    // 🟢 3. Clear active file tracker
     await this.redis.del(`user_active_file:${userId}:${tabId}`);
 
-    // Leave Socket.io room
+    // 🟢 4. Leave Socket.io room
     const socketId = await this.getSocketId(userId);
     const socket = this.io.sockets.sockets.get(socketId);
-
     if (socket) socket.leave(`file:${fileId}`);
 
-    // Broadcast to others
+    // 🟢 5. Final Broadcast (Existing logic)
     this.io.to(`file:${fileId}`).emit("user:left", {
       fileId,
       userId,
     });
+    
+    console.log(`[Session Manager] User ${userId} left file ${fileId}, cursor cleared.`);
   }
 
   async getFileParticipants(fileId) {

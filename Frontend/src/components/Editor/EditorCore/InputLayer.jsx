@@ -4,32 +4,34 @@ import React, { forwardRef, useRef, useEffect } from "react";
 import { useState } from "react";
 import { useTreeSitter } from "../../../hooks/useTreeSitter";
 import { useAutoClosing } from "../../../hooks/useAutoClosing"; // ✅ NEW IMPORT
+import { debugTree } from "../../../utils/treeDebugger";
 
 const InputLayer = forwardRef(
   (
     { content, onChange, onCursorChange, isReadOnly, onTreeUpdate, language },
-    ref
+    ref,
   ) => {
     const textareaRef = useRef(null);
     const lastContentRef = useRef(content);
     const [editParams, setEditParams] = useState(null);
-    
+
     const { tree, errors, loading } = useTreeSitter(
       content,
       language,
-      editParams
+      editParams,
     );
 
     // ✅ DELTA 1: Add auto-closing hook
     const { handleAutoClosing, insertAutoClosingPair } = useAutoClosing(
       tree,
-      content
+      content,
     );
 
     useEffect(() => {
       if (onTreeUpdate) {
         onTreeUpdate({ tree, errors, loading });
       }
+      debugTree(tree,content);
     }, [tree, errors, loading, onTreeUpdate]);
 
     const lineCount = content ? content.split("\n").length : 1;
@@ -89,7 +91,7 @@ const InputLayer = forwardRef(
       const deleteLength = oldContent.length - startIndex - endIndex;
       const insertedText = newContent.substring(
         startIndex,
-        newContent.length - endIndex
+        newContent.length - endIndex,
       );
 
       // ✅ DELTA 3: Check if last character is an opening pair
@@ -115,7 +117,7 @@ const InputLayer = forwardRef(
             lastChar,
             closingInfo.closingChar,
             cursorPos,
-            shouldAddNewline
+            shouldAddNewline,
           );
 
           console.log(`[AutoClose] Generated ${autoCloseDeltas.length} deltas`);
@@ -154,7 +156,7 @@ const InputLayer = forwardRef(
       // These are sent AFTER the main insert
       autoCloseDeltas.forEach((delta) => {
         console.log(
-          `[AutoClose] Sending delta: insert "${delta.text}" at ${delta.index}`
+          `[AutoClose] Sending delta: insert "${delta.text}" at ${delta.index}`,
         );
         onChange(delta);
       });
@@ -175,12 +177,51 @@ const InputLayer = forwardRef(
       });
     };
 
+    // When tab key is pressed space is maintained and cursor is moved forward by 2 spaces
+    const handleKeyDown = (e) => {
+      // 1. Check karo ki kya "Tab" key dabayi gayi hai
+      if (e.key === "Tab") {
+        // Browser ka default focus change behavior roko
+        e.preventDefault();
+
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const { selectionStart, selectionEnd } = textarea;
+        const tabSpace = "  "; // Hum 2 spaces use kar rahe hain code editor feel ke liye
+
+        // 2. State Sync: Parent ko batao ki humne Tab insert kiya hai
+        // Isse Yjs aur Tree-sitter update ho jayenge
+        onChange({
+          type: "insert",
+          index: selectionStart,
+          text: tabSpace,
+        });
+
+        // 3. Local UI Update: Textarea ki value manual update karo
+        // taaki defaultValue/useEffect cycle wait na karna pade
+        const newValue =
+          textarea.value.substring(0, selectionStart) +
+          tabSpace +
+          textarea.value.substring(selectionEnd);
+
+        textarea.value = newValue;
+        lastContentRef.current = newValue;
+
+        // 4. Cursor Management: Cursor ko spaces ke aage set karo
+        const newPos = selectionStart + tabSpace.length;
+        textarea.setSelectionRange(newPos, newPos);
+
+        // Gutter aur Display layers ko update karne ke liye cursor change trigger karo
+        updateCursorPosition();
+      }
+    };
     const updateCursorPosition = () => {
       if (!textareaRef.current) return;
       const cursorOffset = textareaRef.current.selectionStart;
       const textBeforeCursor = textareaRef.current.value.substring(
         0,
-        cursorOffset
+        cursorOffset,
       );
       const lines = textBeforeCursor.split("\n");
       const line = lines.length - 1;
@@ -196,7 +237,7 @@ const InputLayer = forwardRef(
           textareaRef.current = el;
           if (ref) ref.current = el;
         }}
-        className="absolute inset-0 resize-none outline-none bg-transparent"
+        className="absolute inset-0 resize-none outline-none bg-transparent "
         style={{
           fontFamily: "'Fira Code', monospace",
           fontSize: "14px",
@@ -219,14 +260,15 @@ const InputLayer = forwardRef(
           left: 0,
           right: 0,
           bottom: "auto",
-          width: "4000px",
+          width: "min-w-full%",
           whiteSpace: "pre",
           margin: 0,
           resize: "none",
           wrap: "off",
         }}
-        value={content}
+        defaultValue={content}
         onChange={handleChange}
+        onKeyDown={handleKeyDown} // ✅ Yahan integrate kar diya
         onKeyUp={handleCursorEvent}
         onClick={handleCursorEvent}
         onMouseUp={handleCursorEvent}
@@ -235,7 +277,7 @@ const InputLayer = forwardRef(
         wrap="off"
       />
     );
-  }
+  },
 );
 
 InputLayer.displayName = "InputLayer";

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 
 /**
  * Context-Aware Autocomplete Hook
- * 
+ *
  * Features:
  * - Context detection (inside class, function, if statement, etc)
  * - Smart suggestions based on context
@@ -16,42 +16,159 @@ import { useEffect, useState, useRef } from "react";
 
 const KEYWORDS = {
   javascript: [
-    "const", "let", "var", "function", "return", "if", "else", "for", "while",
-    "do", "switch", "case", "break", "continue", "try", "catch", "finally",
-    "throw", "class", "extends", "import", "export", "default", "async", "await",
-    "new", "this", "super", "static", "get", "set", "yield", "typeof", "instanceof",
-    "delete", "void", "in", "of", "from", "as",
+    "const",
+    "let",
+    "var",
+    "function",
+    "return",
+    "if",
+    "else",
+    "for",
+    "while",
+    "do",
+    "switch",
+    "case",
+    "break",
+    "continue",
+    "try",
+    "catch",
+    "finally",
+    "throw",
+    "class",
+    "extends",
+    "import",
+    "export",
+    "default",
+    "async",
+    "await",
+    "new",
+    "this",
+    "super",
+    "static",
+    "get",
+    "set",
+    "yield",
+    "typeof",
+    "instanceof",
+    "delete",
+    "void",
+    "in",
+    "of",
+    "from",
+    "as",
   ],
   typescript: [
     // All JS keywords +
-    "interface", "type", "enum", "namespace", "declare", "readonly", "abstract",
-    "implements", "keyof", "infer", "is", "satisfies",
+    "interface",
+    "type",
+    "enum",
+    "namespace",
+    "declare",
+    "readonly",
+    "abstract",
+    "implements",
+    "keyof",
+    "infer",
+    "is",
+    "satisfies",
   ],
   python: [
-    "def", "class", "if", "elif", "else", "for", "while", "break", "continue",
-    "return", "yield", "import", "from", "as", "try", "except", "finally", "raise",
-    "with", "assert", "pass", "del", "lambda", "global", "nonlocal", "and", "or", "not",
+    "def",
+    "class",
+    "if",
+    "elif",
+    "else",
+    "for",
+    "while",
+    "break",
+    "continue",
+    "return",
+    "yield",
+    "import",
+    "from",
+    "as",
+    "try",
+    "except",
+    "finally",
+    "raise",
+    "with",
+    "assert",
+    "pass",
+    "del",
+    "lambda",
+    "global",
+    "nonlocal",
+    "and",
+    "or",
+    "not",
   ],
 };
 
 const BUILTIN_FUNCTIONS = {
   javascript: [
-    "console.log", "console.error", "console.warn", "console.info",
-    "setTimeout", "setInterval", "clearTimeout", "clearInterval",
-    "JSON.parse", "JSON.stringify",
-    "Array.isArray", "Object.keys", "Object.values", "Object.entries",
-    "Math.floor", "Math.ceil", "Math.round", "Math.max", "Math.min",
-    "parseInt", "parseFloat", "isNaN", "isFinite",
+    "console.log",
+    "console.error",
+    "console.warn",
+    "console.info",
+    "setTimeout",
+    "setInterval",
+    "clearTimeout",
+    "clearInterval",
+    "JSON.parse",
+    "JSON.stringify",
+    "Array.isArray",
+    "Object.keys",
+    "Object.values",
+    "Object.entries",
+    "Math.floor",
+    "Math.ceil",
+    "Math.round",
+    "Math.max",
+    "Math.min",
+    "parseInt",
+    "parseFloat",
+    "isNaN",
+    "isFinite",
   ],
   python: [
-    "print", "len", "range", "enumerate", "map", "filter", "zip",
-    "sorted", "reversed", "sum", "max", "min", "abs",
-    "isinstance", "type", "id", "hash", "dir", "vars",
-    "open", "input", "str", "int", "float", "bool", "list", "dict", "set", "tuple",
+    "print",
+    "len",
+    "range",
+    "enumerate",
+    "map",
+    "filter",
+    "zip",
+    "sorted",
+    "reversed",
+    "sum",
+    "max",
+    "min",
+    "abs",
+    "isinstance",
+    "type",
+    "id",
+    "hash",
+    "dir",
+    "vars",
+    "open",
+    "input",
+    "str",
+    "int",
+    "float",
+    "bool",
+    "list",
+    "dict",
+    "set",
+    "tuple",
   ],
 };
 
-export function useAutocomplete(content, tree, cursorIndex = 0, language = "javascript") {
+export function useAutocomplete(
+  content,
+  tree,
+  cursorIndex = 0,
+  language = "javascript",
+) {
   // ============================================================================
   // State
   // ============================================================================
@@ -128,10 +245,10 @@ export function useAutocomplete(content, tree, cursorIndex = 0, language = "java
         cursorIdx,
         frequencyMapRef.current.get(candidate) || 1,
         detectedCtx,
-        language
+        language,
       );
-      return { 
-        text: candidate, 
+      return {
+        text: candidate,
         score,
         category: categorizeCandidate(candidate, language),
         context: detectedCtx?.type || "global",
@@ -171,8 +288,14 @@ function detectContext(tree, cursorIndex, content) {
   if (!tree) return null;
 
   // Find node at cursor
-  const validCursorIndex = Math.max(0, Math.min(cursorIndex, content.length - 1));
-const node = tree.rootNode.descendantForIndex(validCursorIndex, validCursorIndex);
+  const validCursorIndex = Math.max(
+    0,
+    Math.min(cursorIndex, content.length - 1),
+  );
+  const node = tree.rootNode.descendantForIndex(
+    validCursorIndex,
+    validCursorIndex,
+  );
 
   if (!node) {
     return {
@@ -216,7 +339,7 @@ const node = tree.rootNode.descendantForIndex(validCursorIndex, validCursorIndex
  */
 function determineContextType(nodeChain) {
   // Check from innermost to outermost (nodeChain is bottom-up)
-  
+
   // Inside string/comment
   if (nodeChain[0]?.includes("string") || nodeChain[0]?.includes("comment")) {
     return "string_or_comment";
@@ -228,7 +351,11 @@ function determineContextType(nodeChain) {
   }
 
   // Inside method/function
-  if (nodeChain.some((t) => t === "method_definition" || t === "function_declaration")) {
+  if (
+    nodeChain.some(
+      (t) => t === "method_definition" || t === "function_declaration",
+    )
+  ) {
     return "function_body";
   }
 
@@ -243,9 +370,16 @@ function determineContextType(nodeChain) {
   }
 
   // Inside if/for/while condition/body
-  if (nodeChain.some((t) =>
-    ["if_statement", "for_statement", "while_statement", "do_statement"].includes(t)
-  )) {
+  if (
+    nodeChain.some((t) =>
+      [
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "do_statement",
+      ].includes(t),
+    )
+  ) {
     return "control_flow";
   }
 
@@ -375,7 +509,14 @@ function isInComment(nodeChain) {
 // ============================================================================
 // SCORING ALGORITHM: Frequency + Relevance + Recency
 // ============================================================================
-function calculateScore(candidate, prefix, cursorIndex, frequency, context, language) {
+function calculateScore(
+  candidate,
+  prefix,
+  cursorIndex,
+  frequency,
+  context,
+  language,
+) {
   let score = 0;
 
   // 1. Prefix match (0-40 points)
@@ -415,13 +556,21 @@ function getContextRelevance(candidate, context, language) {
 
   switch (context.type) {
     case "class_body":
-      if (["constructor", "method", "property", "static", "get", "set"].some(k => lowerCandidate.includes(k))) {
+      if (
+        ["constructor", "method", "property", "static", "get", "set"].some(
+          (k) => lowerCandidate.includes(k),
+        )
+      ) {
         return 30;
       }
       break;
 
     case "function_body":
-      if (["return", "const", "let", "if", "for", "while", "try"].some(k => lowerCandidate.startsWith(k))) {
+      if (
+        ["return", "const", "let", "if", "for", "while", "try"].some((k) =>
+          lowerCandidate.startsWith(k),
+        )
+      ) {
         return 25;
       }
       break;
@@ -439,7 +588,11 @@ function getContextRelevance(candidate, context, language) {
       break;
 
     case "error_handling":
-      if (["catch", "finally", "error", "throw"].some(k => lowerCandidate.includes(k))) {
+      if (
+        ["catch", "finally", "error", "throw"].some((k) =>
+          lowerCandidate.includes(k),
+        )
+      ) {
         return 26;
       }
       break;

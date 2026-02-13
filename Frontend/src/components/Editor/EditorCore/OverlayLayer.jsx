@@ -11,7 +11,7 @@ export default function OverlayLayer({
   
   return (
     <div
-      className="absolute top-0 left-0 pointer-events-none overflow-hidden"
+      className="absolute top-0 left-0 pointer-events-none overflow-hidden "
       style={{ 
         zIndex: 30,
         fontFamily: "'Fira Code', monospace",
