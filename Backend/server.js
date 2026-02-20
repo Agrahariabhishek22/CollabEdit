@@ -85,6 +85,28 @@ import SessionCleanup from "./src/jobs/SessionCleanup.js";
 import LSPHealthCheck from "./src/jobs/LSPHealthCheck.js";
 
 // ════════════════════════════════════════════════════════════
+// NEW: Conflict Detection Services
+// ════════════════════════════════════════════════════════════
+import ConflictDetector from "./src/services/conflict/ConflictDetector.js";
+import ConflictResolver from "./src/services/conflict/ConflictResolver.js";
+import ConflictHandler from "./src/socket/handlers/conflict.handler.js";
+import ASTDeltaCompressor from "./src/services/ast/ASTDeltaCompressor.js";
+import ASTHandler from "./src/socket/handlers/ast.handler.js";
+import ConflictRangeTracker from "./src/services/conflict/ConflictRangeTracker.js";
+import ConflictMarkerManager from "./src/services/conflict/ConflictMarkerManager.js";
+import LSPDocumentSanitizer from "./src/services/lsp/LSPDocumentSanitizer.js";
+
+// Conflict services
+let conflictDetector = null;
+let conflictResolver = null;
+let conflictHandler = null;
+let astDeltaCompressor = null;
+let astHandler = null;
+let rangeTracker = null;
+let markerManager = null;
+let lspSanitizer = null;
+
+// ════════════════════════════════════════════════════════════
 // APP & SERVER SETUP
 // ════════════════════════════════════════════════════════════
 const app = express();
@@ -233,6 +255,45 @@ const initializeServices = async () => {
       io,
     );
 
+    // ✅ NEW: Initialize Conflict Detection Services (Phase 1)
+    console.log("\n[Services] Initializing conflict detection...");
+
+    // NEW: Conflict Detection Services
+    // conflictDetector = new ConflictDetector(redis, lspHandler);
+
+    conflictResolver = new ConflictResolver(
+      redis,
+      yjsDocManager,
+      sessionManager,
+      null, // NOTE: io might not be initialized yet here!
+    );
+
+    // ✅ NEW: Phase 2 - Marker Management
+    console.log("\n[Services] Initializing Phase 2 services...");
+
+    rangeTracker = new ConflictRangeTracker();
+    markerManager = new ConflictMarkerManager(yjsDocManager, rangeTracker);
+    lspSanitizer = new LSPDocumentSanitizer();
+
+    global.rangeTracker = rangeTracker;
+    global.markerManager = markerManager;
+    global.lspSanitizer = lspSanitizer;
+
+    console.log("✓ Phase 2 services initialized");
+
+    // Make globally available
+    global.conflictResolver = conflictResolver;
+
+    console.log("✓ Conflict detection services initialized");
+
+    console.log("\n[Services] Initializing AST services...");
+
+    astDeltaCompressor = new ASTDeltaCompressor();
+
+    global.astDeltaCompressor = astDeltaCompressor;
+
+    console.log("✓ AST services initialized");
+
     // CheckpointManager: Create/load checkpoints
     // checkpointManager = new CheckpointManager(prisma, yjsDocManager);
 
@@ -273,6 +334,17 @@ const initializeSocketIO = async () => {
       console.log("✓ PermissionValidator synced with Socket.io");
     }
 
+    // ✅ NEW: Inject io into ConflictResolver
+    if (conflictResolver) {
+      conflictResolver.io = io;
+      console.log("✓ ConflictResolver synced with Socket.io");
+    }
+    // ✅ NEW: Link ConflictResolver with MarkerManager
+    if (conflictResolver) {
+      conflictResolver.setMarkerManager(markerManager);
+      console.log("✓ ConflictResolver linked with MarkerManager");
+    }
+
     // Make io globally available
     global.io = io;
 
@@ -282,7 +354,32 @@ const initializeSocketIO = async () => {
     // ════════════════════════════════════════════════════════
     // INITIALIZE SOCKET HANDLERS (New - for editor)
     // ════════════════════════════════════════════════════════
+    lspHandler = new LSPHandler(
+      io,
+      lspManager,
+      yjsDocManager,
+      permissionValidator,
+    );
+    // ✅ NEW: Initialize AST Handler (Phase 3)
+    astHandler = new ASTHandler(
+      io,
+      yjsDocManager,
+      astDeltaCompressor,
+      lspHandler,
+    );
+    lspHandler.setASTHandler(astHandler);
 
+    global.astHandler = astHandler;
+
+    conflictDetector = new ConflictDetector(redis, lspHandler);
+    global.conflictDetector = conflictDetector;
+
+    conflictHandler = new ConflictHandler(
+      io,
+      conflictDetector,
+      conflictResolver,
+      markerManager, // 👈 ADD THIS
+    );
     // YjsHandler: Real-time Yjs sync
     yjsHandler = new YjsHandler(
       io,
@@ -290,15 +387,10 @@ const initializeSocketIO = async () => {
       permissionValidator,
       sessionManager,
       redis,
+      conflictHandler,
     );
 
     // LSPHandler: Code intelligence (diagnostics, completion)
-    lspHandler = new LSPHandler(
-      io,
-      lspManager,
-      yjsDocManager,
-      permissionValidator,
-    );
 
     // PermissionHandler: Live role changes
     permissionHandler = new PermissionHandler(
@@ -323,7 +415,17 @@ const initializeSocketIO = async () => {
       permissionValidator,
       yjsDocManager,
       lspManager,
+      astHandler, // 👈 ADD THIS (Phase 3)
     );
+
+    // CRITICAL: Update ConflictResolver with io reference
+    // (because io wasn't available during service initialization)
+    if (conflictResolver) {
+      conflictResolver.io = io;
+      console.log("✓ ConflictResolver synced with Socket.io");
+    }
+
+    global.conflictHandler = conflictHandler;
 
     // ════════════════════════════════════════════════════════
     // CONNECTION HANDLERS (Combined - existing + new)
@@ -341,7 +443,7 @@ const initializeSocketIO = async () => {
       socket.on("join-project", (data) => handleJoinProject(socket, data));
       socket.on("leave-project", (data) => handleLeaveProject(socket, data));
       socket.on("error", (error) => handleError(socket, error));
- 
+
       // ════════════════════════════════════════════════════
       // NEW HANDLERS (Editor collaboration features)
       // These register multiple events:
@@ -355,6 +457,14 @@ const initializeSocketIO = async () => {
       yjsHandler.register(socket);
       lspHandler.register(socket);
       permissionHandler.register(socket);
+      conflictHandler.register(socket);
+      astHandler.register(socket);
+
+      // Update LSP handler with AST handler (Phase 3 integration)
+      if (lspHandler) {
+        lspHandler.astHandler = astHandler;
+      }
+
       // checkpointHandler.register(socket);
 
       // ════════════════════════════════════════════════════
@@ -398,8 +508,8 @@ const initializePubSub = async () => {
 
         // Base64 string se wapas pure Uint8Array
         const binaryUpdate = new Uint8Array(Buffer.from(data.update, "base64"));
-        console.log("[server-pub/sub] biaryUpdates" ,binaryUpdate);
-        
+        console.log("[server-pub/sub] biaryUpdates", binaryUpdate);
+
         // Final broadcast to browser
         io.to(`file:${fileId}`).except(data.socketId).emit("yjs:update", {
           fileId,

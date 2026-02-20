@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useRef, useEffect } from "react";
 import { useState } from "react";
-import { useTreeSitter } from "../../../hooks/useTreeSitter";
+import { useTreeSitter } from "../../../hooks/useTreeSitter.js";
 import { useAutoClosing } from "../../../hooks/useAutoClosing"; // ✅ NEW IMPORT
 import { debugTree } from "../../../utils/treeDebugger";
 

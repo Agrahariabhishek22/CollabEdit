@@ -52,7 +52,7 @@ export default function EditorHeader({
       {/* Middle Section: File Info */}
       {selectedFile?.id && (
         <div className="flex-1 flex items-center gap-2 px-4 py-1.5 bg-slate-800/40 border border-slate-700/50 rounded-lg min-w-0 max-w-md">
-          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           <span className="text-sm font-semibold text-slate-100 truncate">
             {selectedFile.name}
           </span>

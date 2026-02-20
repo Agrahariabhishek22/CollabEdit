@@ -1,5 +1,15 @@
-// socket/handlers/checkpoint.handler.js
+// src/socket/handlers/checkpoint.handler.js
 
+/**
+ * CheckpointHandler
+ *
+ * Socket events for checkpoint creation and voting:
+ * - checkpoint:create     (create a snapshot)
+ * - checkpoint:list       (get all checkpoints)
+ * - checkpoint:vote       (initiate vote to restore)
+ * - checkpoint:vote-cast  (user casts vote)
+ * - checkpoint:result     (check vote result)
+ */
 class CheckpointHandler {
   constructor(io, checkpointManager, votingManager, permissionValidator) {
     this.io = io;
@@ -9,206 +19,234 @@ class CheckpointHandler {
   }
 
   register(socket) {
-    // ═══════════════════════════════════════════════════════════
-    // CREATE CHECKPOINT
-    // ═══════════════════════════════════════════════════════════
-
-    socket.on('checkpoint:create', async ({ fileId }) => {
-      await this.handleCreateCheckpoint(socket, fileId);
+    socket.on("checkpoint:create", async (data) => {
+      await this._handleCreate(socket, data);
     });
 
-    // ═══════════════════════════════════════════════════════════
-    // REQUEST REVERT
-    // ═══════════════════════════════════════════════════════════
-
-    socket.on('checkpoint:request-revert', async ({ fileId, checkpointId }) => {
-      await this.handleRequestRevert(socket, fileId, checkpointId);
+    socket.on("checkpoint:list", async (data) => {
+      await this._handleList(socket, data);
     });
 
-    // ═══════════════════════════════════════════════════════════
-    // CAST VOTE
-    // ═══════════════════════════════════════════════════════════
-
-    socket.on('checkpoint:vote', async ({ voteId, vote }) => {
-      await this.handleVote(socket, voteId, vote);
+    socket.on("checkpoint:initiate-vote", async (data) => {
+      await this._handleInitiateVote(socket, data);
     });
+
+    socket.on("checkpoint:vote", async (data) => {
+      await this._handleVote(socket, data);
+    });
+
+    socket.on("checkpoint:result", async (data) => {
+      await this._handleGetResult(socket, data);
+    });
+
+    console.log(`[CheckpointHandler] Events registered for socket ${socket.id}`);
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // CREATE CHECKPOINT
-  // ═══════════════════════════════════════════════════════════
-
-  async handleCreateCheckpoint(socket, fileId) {
-    const { userId, userName } = socket;
-
+  /**
+   * EVENT: Create checkpoint
+   */
+  async _handleCreate(socket, { fileId, description }) {
     try {
-      // Validate permission
+      const { userId } = socket;
+
+      // Validate EDIT access
       const validation = await this.permissionValidator.validateAction(
         userId,
         fileId,
-        'CHECKPOINT'
+        "EDIT"
       );
 
       if (!validation.allowed) {
-        return socket.emit('checkpoint:error', {
-          message: 'You do not have permission to create checkpoints',
+        return socket.emit("checkpoint:error", {
+          error: "Access denied",
         });
       }
 
       // Create checkpoint
-      const checkpoint = await this.checkpointManager.create(fileId, userId);
-
-      // Notify user
-      socket.emit('checkpoint:created', {
-        fileId,
-        checkpoint,
-      });
-
-      // Broadcast to others
-      socket.to(`file:${fileId}`).emit('checkpoint:user-created', {
+      const checkpoint = await this.checkpointManager.create(
         fileId,
         userId,
-        userName,
-        timestamp: checkpoint.timestamp,
-      });
+        description
+      );
 
-      console.log(`[Checkpoint] ${userName} created checkpoint for ${fileId}`);
-
-    } catch (err) {
-      console.error('[Checkpoint] Create error:', err);
-      socket.emit('checkpoint:error', {
-        message: err.message,
-      });
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // REQUEST REVERT (Start voting)
-  // ═══════════════════════════════════════════════════════════
-
-  async handleRequestRevert(socket, fileId, checkpointId) {
-    const { userId, userName } = socket;
-
-    try {
-      // Get all active participants
-      const participants = await this.sessionManager.getFileParticipants(fileId);
-      const participantIds = Object.keys(participants);
-
-      if (participantIds.length === 1) {
-        // Only requester is online, auto-approve
-        await this.executeRevert(fileId, checkpointId);
-        
-        socket.emit('checkpoint:reverted', {
-          fileId,
-          checkpointId,
+      if (!checkpoint) {
+        return socket.emit("checkpoint:error", {
+          error: "Failed to create checkpoint",
         });
-
-        return;
       }
 
-      // Start voting
-      const voteSession = await this.votingManager.startVote({
-        fileId,
-        checkpointId,
-        requestedBy: userId,
-        participants: participantIds,
-        timeout: 30000, // 30 seconds
+      // Notify all users in file
+      this.io.to(`file:${fileId}`).emit("checkpoint:created", {
+        checkpoint: {
+          id: checkpoint.id,
+          fileId: checkpoint.fileId,
+          createdBy: checkpoint.createdBy,
+          createdAt: checkpoint.createdAt,
+          description: checkpoint.description,
+        },
       });
 
-      // Broadcast vote request to all
-      this.io.to(`file:${fileId}`).emit('checkpoint:vote-started', {
-        voteId: voteSession.id,
-        fileId,
-        checkpointId,
-        requestedBy: userName,
-        totalVoters: participantIds.length,
-        timeout: 30000,
-      });
+      socket.emit("checkpoint:created", { checkpoint: checkpoint.id });
 
-      console.log(`[Checkpoint] Vote started for ${fileId} by ${userName}`);
-
+      console.log(
+        `[CheckpointHandler] Checkpoint created for ${fileId} by ${userId}`
+      );
     } catch (err) {
-      console.error('[Checkpoint] Revert request error:', err);
-      socket.emit('checkpoint:error', {
-        message: err.message,
-      });
+      console.error("[CheckpointHandler] Create error:", err);
+      socket.emit("checkpoint:error", { error: err.message });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // HANDLE VOTE
-  // ═══════════════════════════════════════════════════════════
-
-  async handleVote(socket, voteId, vote) {
-    const { userId, userName } = socket;
-
+  /**
+   * EVENT: List checkpoints
+   */
+  async _handleList(socket, { fileId }) {
     try {
-      // Register vote
-      const result = await this.votingManager.castVote(voteId, userId, vote);
+      const checkpoints = await this.checkpointManager.listCheckpoints(fileId);
 
-      // Broadcast vote update
-      this.io.to(`file:${result.fileId}`).emit('checkpoint:vote-cast', {
+      socket.emit("checkpoint:list", { fileId, checkpoints });
+
+      console.log(
+        `[CheckpointHandler] Listed ${checkpoints.length} checkpoints for ${fileId}`
+      );
+    } catch (err) {
+      console.error("[CheckpointHandler] List error:", err);
+      socket.emit("checkpoint:error", { error: err.message });
+    }
+  }
+
+  /**
+   * EVENT: Initiate vote to restore checkpoint
+   */
+  async _handleInitiateVote(socket, { checkpointId, fileId }) {
+    try {
+      const { userId } = socket;
+
+      // Get current participants in file
+      const participants = await this._getFileParticipants(fileId);
+
+      const voteResult = await this.votingManager.initiateVote(
+        checkpointId,
+        fileId,
+        userId,
+        participants
+      );
+
+      if (!voteResult.success) {
+        return socket.emit("checkpoint:error", {
+          error: voteResult.error,
+        });
+      }
+
+      // Notify all users in file
+      this.io.to(`file:${fileId}`).emit("checkpoint:vote-initiated", {
+        voteId: voteResult.voteId,
+        checkpointId,
+        initiatedBy: userId,
+        participants,
+        expiresAt: voteResult.vote.expiresAt,
+      });
+
+      console.log(
+        `[CheckpointHandler] Vote initiated by ${userId} for checkpoint ${checkpointId}`
+      );
+    } catch (err) {
+      console.error("[CheckpointHandler] Initiate vote error:", err);
+      socket.emit("checkpoint:error", { error: err.message });
+    }
+  }
+
+  /**
+   * EVENT: Cast vote
+   */
+  async _handleVote(socket, { voteId, choice }) {
+    try {
+      const { userId } = socket;
+
+      const voteResult = await this.votingManager.vote(voteId, userId, choice);
+
+      if (!voteResult.success) {
+        return socket.emit("checkpoint:error", {
+          error: voteResult.error,
+        });
+      }
+
+      // Notify all users about the vote
+      const { vote, result } = voteResult;
+
+      this.io.to(`file:${vote.fileId}`).emit("checkpoint:vote-cast", {
         voteId,
         userId,
-        userName,
-        vote,
-        yesCount: result.yesCount,
-        noCount: result.noCount,
-        totalVoters: result.totalVoters,
+        choice,
+        result,
       });
 
-      // Check if voting complete
-      if (result.status === 'PASSED') {
-        // Execute revert
-        await this.executeRevert(result.fileId, result.checkpointId);
+      // If vote passed, auto-restore
+      if (result.passed && result.allVoted) {
+        await this._restoreCheckpoint(vote.checkpointId, vote.fileId);
 
-        this.io.to(`file:${result.fileId}`).emit('checkpoint:reverted', {
-          fileId: result.fileId,
-          checkpointId: result.checkpointId,
-          result: 'PASSED',
-        });
-
-      } else if (result.status === 'REJECTED') {
-        this.io.to(`file:${result.fileId}`).emit('checkpoint:vote-rejected', {
+        this.io.to(`file:${vote.fileId}`).emit("checkpoint:restored", {
+          checkpointId: vote.checkpointId,
           voteId,
-          fileId: result.fileId,
         });
       }
 
+      console.log(
+        `[CheckpointHandler] ${userId} voted for checkpoint restore`
+      );
     } catch (err) {
-      console.error('[Checkpoint] Vote error:', err);
-      socket.emit('checkpoint:error', {
-        message: err.message,
-      });
+      console.error("[CheckpointHandler] Vote error:", err);
+      socket.emit("checkpoint:error", { error: err.message });
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // EXECUTE REVERT (Apply checkpoint)
-  // ═══════════════════════════════════════════════════════════
-
-  async executeRevert(fileId, checkpointId) {
+  /**
+   * EVENT: Get vote result
+   */
+  async _handleGetResult(socket, { voteId }) {
     try {
-      // Load checkpoint
-      const checkpoint = await this.checkpointManager.load(checkpointId);
+      const result = await this.votingManager.getResult(voteId);
 
-      // Apply to Shadow Y.Doc
-      await this.yjsDocManager.applyCheckpoint(fileId, checkpoint.yjsState);
+      if (!result.success) {
+        return socket.emit("checkpoint:error", {
+          error: result.error,
+        });
+      }
 
-      // Broadcast full state to all users
-      const stateVector = await this.yjsDocManager.getStateVector(fileId);
+      socket.emit("checkpoint:result", { voteId, result: result.result });
 
-      this.io.to(`file:${fileId}`).emit('yjs:full-sync', {
-        fileId,
-        state: Array.from(stateVector),
-      });
-
-      console.log(`[Checkpoint] Reverted ${fileId} to checkpoint ${checkpointId}`);
-
+      console.log(`[CheckpointHandler] Got result for vote ${voteId}`);
     } catch (err) {
-      console.error('[Checkpoint] Execute revert error:', err);
-      throw err;
+      console.error("[CheckpointHandler] Get result error:", err);
+      socket.emit("checkpoint:error", { error: err.message });
     }
+  }
+
+  /**
+   * Helper: Restore checkpoint
+   */
+  async _restoreCheckpoint(checkpointId, fileId) {
+    try {
+      const result = await this.checkpointManager.restore(checkpointId, fileId);
+
+      if (result.success) {
+        console.log(`[CheckpointHandler] Restored ${fileId} to ${checkpointId}`);
+      }
+
+      return result;
+    } catch (err) {
+      console.error("[CheckpointHandler] Restore error:", err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Helper: Get participants in file
+   */
+  async _getFileParticipants(fileId) {
+    // TODO: Get from SessionManager
+    // For now, return empty (will be connected to SessionManager)
+    return [];
   }
 }
 

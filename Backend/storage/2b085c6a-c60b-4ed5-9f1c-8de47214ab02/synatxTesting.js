@@ -108,7 +108,7 @@ function calculate() {
 // Hard Syntax Error 2 (Closing bracket mismatch for previous broken function)
 } ) ;
 
-
+ 
 
 
 

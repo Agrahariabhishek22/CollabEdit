@@ -56,6 +56,8 @@ export default function EditorPage({
       );
       console.log("Binary as Typed Array:", new Uint8Array(data.initialState));
       console.log("[Editorr page] these are participants", data.participants);
+      socket.emit("ast:request-tree", { fileId: data.fileId });
+
     });
 
     // Listen for join errors (e.g., Permission Denied)

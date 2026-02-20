@@ -1,12 +1,21 @@
 // socket/handlers/yjs.handler.js
+import ConflictHandler from "./conflict.handler.js";
 
 class YjsHandler {
-  constructor(io, yjsDocManager, permissionValidator, sessionManager, redis) {
+  constructor(
+    io,
+    yjsDocManager,
+    permissionValidator,
+    sessionManager,
+    redis,
+    conflictHandler,
+  ) {
     this.io = io;
     this.yjsDocManager = yjsDocManager;
     this.permissionValidator = permissionValidator;
     this.sessionManager = sessionManager;
     this.redis = redis;
+    this.conflictHandler = conflictHandler;
 
     // Debounce timers for flush
     this.flushTimers = new Map();
@@ -122,12 +131,12 @@ class YjsHandler {
       console.log(
         "[yjs handler] binary update size:",
         binaryUpdate.length,
-        binaryUpdate,
+        // binaryUpdate,
       );
 
       // YJS decoding check
       if (binaryUpdate.length === 0) return;
- 
+
       await this.yjsDocManager.applyDelta(fileId, binaryUpdate);
 
       // socket.to(...) ka matlab hai: "Bhejne waale ko chhod kar, room mein baki sabko bhejo"
@@ -138,16 +147,33 @@ class YjsHandler {
       );
 
       socket.to(`file:${fileId}`).emit("yjs:update", {
-        fileId, 
+        fileId,
         update: binaryUpdate, // Socket.io raw binary handle kar leta hai
         userId,
         userName,
       });
 
-      // Step 4: Schedule disk flush (debounced)
-      this.scheduleDiskFlush(fileId); 
+      if (this.conflictHandler) {
+        console.log("[Yjs] Triggering conflict detection after update... ");
 
-      // Step 5: Backup to Redis (debounced)
+        const code = binaryUpdate
+          ? await this._extractCodeFromUpdate(fileId)
+          : null;
+        if (code) {
+          await this.conflictHandler.detectAndBroadcast({
+            fileId,
+            code,
+            language: await this._getFileLanguage(fileId),
+            userId,
+            socket,
+          });
+        }
+      }
+
+      // Step 5: Schedule disk flush (debounced)
+      this.scheduleDiskFlush(fileId);
+
+      // Step 6: Backup to Redis (debounced)
       this.scheduleRedisBackup(fileId);
     } catch (err) {
       console.error("[Yjs] Update error:", err);
@@ -218,6 +244,52 @@ class YjsHandler {
         console.error("[Yjs] Redis backup error:", err);
       }
     }, 2000);
+  }
+
+  async _extractCodeFromUpdate(fileId) {
+    try {
+      const docData = await this.yjsDocManager.getOrCreateDoc(fileId);
+      return docData?.ytext?.toString() || null;
+    } catch (err) {
+      console.error("[YjsHandler] Error extracting code:", err);
+      return null;
+    }
+  }
+  async _getCleanCodeForLSP(fileId) {
+    try {
+      const code = await this._extractCodeFromUpdate(fileId);
+      if (!code) return null;
+      // Use global sanitizer to remove markers
+      if (global.lspSanitizer) {
+        return global.lspSanitizer.sanitize(code);
+      }
+
+      return code;
+    } catch (err) {
+      console.error("[YjsHandler] Error cleaning code for LSP:", err);
+      return null;
+    }
+  }
+
+  async _getFileLanguage(fileId) {
+    // TODO: Get from DB or cache
+    // For now, detect from file extension
+    try {
+      const ext = fileId.split(".").pop();
+      const languageMap = {
+        js: "javascript",
+        jsx: "javascript",
+        ts: "javascript",
+        tsx: "javascript",
+        py: "python",
+        java: "java",
+        cpp: "cpp",
+        go: "go",
+      };
+      return languageMap[ext] || "javascript";
+    } catch (err) {
+      return "javascript";
+    }
   }
 }
 

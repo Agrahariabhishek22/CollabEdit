@@ -6,7 +6,7 @@
 // --- 1. Hard Syntax Errors (ERROR nodes) ---
 
 // Error 1: Incomplete Statement
-const a = 
+const a =67 ;
 
 // Error 2: Mismatched Brackets & Invalid Characters
 function testError() {
@@ -30,7 +30,7 @@ const user = {
 const config = {
     theme: "dark",
     mode: "edit",
-   // theme: "light" // Duplicate key 'theme'
+  //  theme: "light" // Duplicate key 'theme'
 };
 
 // Structure 2: Empty Blocks
@@ -44,7 +44,7 @@ function calculate() {
     console.log("Ye kabhi print nahi hoga!"); // Unreachable
     const x = 50; // Unreachable
     return result;
-// console.log("i am done mera ho gya");
+   //console.log("i am done mera ho gya");
 }
 
 // Hard Syntax Error 2 (Closing bracket mismatch for )
@@ -58,6 +58,8 @@ if(true){
     if(true){
       console.log("ok bro i am done");
       if(true){
+
+
         console.log("ok");
       } 
     }
@@ -65,9 +67,37 @@ if(true){
 }
 
 
+if(true){
+  console.log("okay");
+  
+}
 
 
+if(true){
+      
+  console.log("I am done");
+    
+}
+ 
+if(true){
+  console.log("okay");
+  if(true){
+    }
+  
+}
+  
 
 
+if(true){
+  
+}
+function greet(){
+  console.log("hghgdh");
+}
 
-
+   if(){
+  
+  
+}
+  
+  

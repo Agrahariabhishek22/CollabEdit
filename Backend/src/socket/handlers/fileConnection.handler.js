@@ -7,12 +7,14 @@ class FileConnectionHandler {
     permissionValidator,
     yjsDocManager,
     lspManager,
+    astHandler, // 👈 ADD THIS
   ) {
     this.io = io;
     this.sessionManager = sessionManager;
     this.permissionValidator = permissionValidator;
     this.yjsDocManager = yjsDocManager;
     this.lspManager = lspManager;
+    this.astHandler = astHandler;
   }
 
   register(socket) {
@@ -33,7 +35,7 @@ class FileConnectionHandler {
   }
 
   async handleFileJoin(socket, { fileId, projectId }) {
-    const { userId, userName, tabId ,userEmail} = socket;
+    const { userId, userName, tabId, userEmail } = socket;
 
     try {
       // 1. Permission Check (Intact)
@@ -51,7 +53,9 @@ class FileConnectionHandler {
 
       // 2. Yjs Shadow Doc Rehydration (New! 🚀)
       // Ye function file ko RAM mein layega aur Redis registry update karega
-      console.log(`[Yjs] Rehydrating doc for file ${fileId} (User: ${userName})`);
+      console.log(
+        `[Yjs] Rehydrating doc for file ${fileId} (User: ${userName})`,
+      );
       await this.yjsDocManager.getOrCreateDoc(fileId);
 
       // Doc manager mein user ko add karo taaki cleanup scheduler ko pata rahe
@@ -78,11 +82,17 @@ class FileConnectionHandler {
         fileId,
         accessMode: validation.mode,
         participants: await this.sessionManager.getFileParticipants(fileId),
-        initialState: Buffer.from(initialState), // 👈 Ye user ka editor "re-construct" karega
+        initialState: Buffer.from(initialState),
         timestamp: Date.now(),
       });
 
-      // 6. Notify Others (Intact)
+      // 🟢 NEW (Phase 3): Send initial AST tree
+      if (this.astHandler) {
+        socket.emit("ast:request-tree", { fileId });
+        console.log(`[FileConnection] Requested AST tree for ${fileId}`);
+      }
+
+      // 7. Notify Others (Intact)
       socket.to(`file:${fileId}`).emit("user:joined", {
         fileId,
         user: {
@@ -114,22 +124,34 @@ class FileConnectionHandler {
     } catch (err) {
       console.error("[File Leave] Error:", err);
     }
-  } 
+  }
 
   async handleCursorUpdate(socket, { fileId, cursor }) {
-    const { userId,userName,userEmail } = socket;
-    console.log("[Cursor Update] Recieved cursor update from user",userName,cursor);
-    
+    const { userId, userName, userEmail } = socket;
+    console.log(
+      "[Cursor Update] Recieved cursor update from user",
+      userName,
+      cursor,
+    );
+
     try {
-      await this.sessionManager.updateCursorPosition(fileId, userId,userName,userEmail, cursor);
+      await this.sessionManager.updateCursorPosition(
+        fileId,
+        userId,
+        userName,
+        userEmail,
+        cursor,
+      );
     } catch (err) {
       console.error("[Cursor Update] Error:", err);
     }
-  } 
+  }
 
   async handleDisconnect(socket) {
     const { userId, currentFileId, tabId } = socket;
-console.log(`[Disconnect] Cleaning up for user ${userId} (File: ${currentFileId})`);
+    console.log(
+      `[Disconnect] Cleaning up for user ${userId} (File: ${currentFileId})`,
+    );
     try {
       // Leave current file if any
       if (currentFileId) {

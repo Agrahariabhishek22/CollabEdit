@@ -6,7 +6,7 @@ import {
   useTreeSitter,
   getIndentLevelAtCursor,
 } from "../../../hooks/useTreeSitter";
-import { useAutocomplete } from "../../../hooks/useAutocomplete"; // ✅ Updated import
+import { useAutocomplete } from "../../../hooks/useAutoComplete"; // ✅ Updated import
 import { useSmartIndent } from "../../../hooks/useSmartIndent";
 import SuggestionDropdown from "./WidgetLayer/SuggestionDropdown";
 import SyntaxErrorWidget from "./WidgetLayer/SyntaxErrorWidget";

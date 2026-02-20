@@ -48,7 +48,7 @@ class YjsDocManager {
         );
 
         console.log("Redis se asli Buffer aaya:", Buffer.isBuffer(binary));
-        console.log("[Yjs Doc] Data coming from redis", binary);
+        // console.log("[Yjs Doc] Data coming from redis", binary);
 
         if (binary)
           // console.log("Redis se asli Buffer aaya:", Buffer.isBuffer(binary)); // Ye true hona chahiye
@@ -83,7 +83,7 @@ class YjsDocManager {
       if (binary) {
         try {
           console.log(
-            `${logPrefix} ⚙️ Applying binary update to Y.Doc..., size: ${binary.length} bytes, binary: ${binary}`,
+            `${logPrefix} ⚙️ Applying binary update to Y.Doc..., size: ${binary.length} bytes`,
           );
           try {
             const updateArray = new Uint8Array(binary);
@@ -274,7 +274,7 @@ class YjsDocManager {
     if (!doc) return;
 
     const binary = Y.encodeStateAsUpdate(doc.ydoc);
-    console.log("[YjsDOC manager] backuptoredis ", binary);
+    // console.log("[YjsDOC manager] backuptoredis ", binary);
 
     // ✅ node-redis v4 mein setEx syntax (Capital E)
     await this.redis.setEx(

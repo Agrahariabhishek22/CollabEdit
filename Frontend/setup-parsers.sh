@@ -14,7 +14,7 @@ curl -L "https://cdn.jsdelivr.net/npm/web-tree-sitter@0.25.1/tree-sitter.wasm" -
 echo "Downloading Latest ABI 15 Grammars..."
 
 # 2. Individual Grammars (Using @latest to ensure ABI 15)
-curl -L "https://unpkg.com/tree-sitter-javascript@latest/tree-sitter-javascript.wasm" -o public/parsers/tree-sitter-javascript.wasm
+curl -L "https://unpkg.com/tree-sitter-javascript@0.25.1/tree-sitter-javascript.wasm" -o public/parsers/tree-sitter-javascript.wasm
 curl -L "https://unpkg.com/tree-sitter-cpp@latest/tree-sitter-cpp.wasm" -o public/parsers/tree-sitter-cpp.wasm
 curl -L "https://unpkg.com/tree-sitter-python@latest/tree-sitter-python.wasm" -o public/parsers/tree-sitter-python.wasm
 curl -L "https://unpkg.com/tree-sitter-java@latest/tree-sitter-java.wasm" -o public/parsers/tree-sitter-java.wasm
