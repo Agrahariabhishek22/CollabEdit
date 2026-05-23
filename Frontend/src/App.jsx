@@ -10,10 +10,15 @@ import Login from "./pages/login";
 import DashboardLayout from "./pages/DashboardLayout";
 import { ToastContainer, toast } from "react-toastify";
 import { SocketProvider } from "./context/SocketContext";
+import { ConflictProvider } from "./context/ConflictContext"; // ✅ ADD-ON
+import { useSocket } from "./hooks/useSocket"; // ✅ ADD-ON
 
-function App() {
+// ✅ ADD-ON: Wrapper component to provide socket to ConflictProvider
+function AppContent() {
+  const { socket } = useSocket();
+
   return (
-    <SocketProvider>
+    <ConflictProvider socket={socket}>
       <Router>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
@@ -32,9 +37,16 @@ function App() {
           draggable
           pauseOnHover
           theme="dark"
-          // transition={Bounce}
         />
       </Router>
+    </ConflictProvider>
+  );
+}
+
+function App() {
+  return (
+    <SocketProvider>
+      <AppContent />
     </SocketProvider>
   );
 }

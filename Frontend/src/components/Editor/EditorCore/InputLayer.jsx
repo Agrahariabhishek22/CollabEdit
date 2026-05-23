@@ -31,7 +31,7 @@ const InputLayer = forwardRef(
       if (onTreeUpdate) {
         onTreeUpdate({ tree, errors, loading });
       }
-      debugTree(tree,content);
+      // debugTree(tree,content);
     }, [tree, errors, loading, onTreeUpdate]);
 
     const lineCount = content ? content.split("\n").length : 1;

@@ -18,12 +18,11 @@
 import ConflictMarkerManager from "../../services/conflict/ConflictMarkerManager.js";
 
 class ConflictHandler {
-  constructor(io, conflictDetector, conflictResolver,markerManager) {
+  constructor(io, conflictDetector, conflictResolver, markerManager) {
     this.io = io;
     this.conflictDetector = conflictDetector;
     this.conflictResolver = conflictResolver;
-    this.markerManager = markerManager;  // 👈 ADD THIS
-
+    this.markerManager = markerManager; // 👈 ADD THIS
   }
 
   /**
@@ -114,10 +113,12 @@ class ConflictHandler {
       for (const conflict of conflicts) {
         // Send to specific user (affected by conflict)
         socket.emit("conflict:detected", {
+          fileId, // ✅ ADD-ON: Include fileId
           conflictId: conflict.id,
           type: conflict.type,
           severity: conflict.severity,
           symbol: conflict.symbol,
+          relatedSymbols: conflict.relatedSymbols || [], // ✅ ADD-ON
           message: this._generateUserMessage(conflict),
           suggestedFix: conflict.suggestedFix,
           location: conflict.location,
@@ -234,10 +235,15 @@ class ConflictHandler {
         `[ConflictHandler] User ${socket.userId} dismissed conflict ${conflictId}`,
       );
 
-      // Optional: Track dismissal for analytics
-      // For now, just log
-
+      // Broadcast dismissal to all users in file
+      // this.io.to(`file:${fileId}`).emit("conflict:dismissed", {
+      //   conflictId,
+      //   fileId, // ✅ ADD-ON: Include fileId
+      // });
       socket.emit("conflict:dismissed", { conflictId });
+      console.log(
+        `[ConflictHandler] Dismissed conflict broadcasted: ${conflictId}`,
+      );
     } catch (err) {
       console.error("[ConflictHandler] Dismiss conflict error:", err);
     }

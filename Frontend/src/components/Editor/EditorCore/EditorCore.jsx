@@ -8,10 +8,16 @@ import OverlayLayer from "./OverlayLayer";
 import { useEditor } from "../../../hooks/useEditor";
 import WidgetLayer, { detectLanguage } from "./WidgetLayer";
 import { useTreeSitter } from "../../../hooks/useTreeSitter";
+import { useConflict } from "../../../hooks/useConflict"; // ✅ ADD-ON
+import ConflictModal from "../ConflictModal"; // ✅ ADD-ON
 
 export default function EditorCore({ selectedFile, accessMode }) {
   const { ydoc, ytext, awarenessStates, updateCursor, isReady } = useEditor();
   const language = detectLanguage(selectedFile?.name);
+  
+  // ✅ ADD-ON: Get conflicts from ConflictContext
+  const { getConflicts, setActiveConflict, activeConflict } = useConflict();
+  const fileConflicts = selectedFile?.id ? getConflicts(selectedFile.id) : [];
   // ════════════════════════════════════════════════════════════
   // STATE
   // ════════════════════════════════════════════════════════════
@@ -190,6 +196,11 @@ export default function EditorCore({ selectedFile, accessMode }) {
     [handleInputChange, inputLayerRef],
   );
 
+  // ✅ ADD-ON: Handle conflict click from gutter badges
+  const handleConflictClick = useCallback((conflict) => {
+    setActiveConflict({ ...conflict, fileId: selectedFile?.id });
+  }, [selectedFile?.id, setActiveConflict]);
+
   // ════════════════════════════════════════════════════════════
   // READ-ONLY MODE: If user is VIEWER
   // ════════════════════════════════════════════════════════════
@@ -216,7 +227,13 @@ export default function EditorCore({ selectedFile, accessMode }) {
       >
         {/* 2. GUTTER AREA: Left side fixed width */}
         <div className="w-12 sticky left-0 z-30 bg-slate-900 border-r border-slate-800">
-          <GutterPanel ref={gutterPanelRef} lines={lines} errors={treeData.errors} />
+          <GutterPanel 
+            ref={gutterPanelRef} 
+            lines={lines} 
+            errors={treeData.errors}
+            conflicts={fileConflicts} // ✅ ADD-ON
+            onConflictClick={handleConflictClick} // ✅ ADD-ON
+          />
         </div>
 
         {/* 3. EDITOR CONTENT AREA: Right side bacha hua space */}
@@ -265,6 +282,15 @@ export default function EditorCore({ selectedFile, accessMode }) {
           />
         </div>
       </div>
+      
+      {/* ✅ ADD-ON: Conflict Modal */}
+      {activeConflict && (
+        <ConflictModal
+          conflict={activeConflict}
+          fileId={selectedFile?.id}
+          onClose={() => setActiveConflict(null)}
+        />
+      )}
     </div>
   );
 }
